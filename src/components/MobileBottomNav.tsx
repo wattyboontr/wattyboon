@@ -1,13 +1,9 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { Home, Bookmark, PenTool, MessageSquare, User as UserIcon, Compass } from 'lucide-react';
-import { getSavedDeviceAccounts } from '../lib/deviceAccounts';
 
 export const MobileBottomNav: React.FC = () => {
-  const { activeView, setActiveView, setSelectedCategoryFilter, openStoryEditor, openAuthorProfile, currentUser } = useApp();
-
-  const savedAccounts = !currentUser ? getSavedDeviceAccounts() : [];
-  const lastSavedAccount = savedAccounts[0] || null;
+  const { activeView, setActiveView, setSelectedCategoryFilter, openStoryEditor, openAuthorProfile, currentUser, setIsAuthModalOpen } = useApp();
 
   // In reader view, keep screen distraction-free (StoryReader has its own floating quick toolbar)
   if (activeView === 'reader') {
@@ -45,10 +41,10 @@ export const MobileBottomNav: React.FC = () => {
     },
     {
       id: 'profile',
-      label: currentUser ? 'Profil' : lastSavedAccount ? 'Oturum' : 'Giriş',
+      label: currentUser ? 'Profil' : 'Giriş',
       customRender: () => {
         const isActive = activeView === 'profile';
-        const displayAvatar = currentUser?.avatar || lastSavedAccount?.avatar;
+        const displayAvatar = currentUser?.avatar;
 
         return (
           <button
@@ -57,10 +53,10 @@ export const MobileBottomNav: React.FC = () => {
               if (currentUser) {
                 openAuthorProfile(currentUser.id);
               } else {
-                setActiveView('profile');
+                setIsAuthModalOpen(true);
               }
             }}
-            className={`relative flex flex-col items-center justify-center min-w-[56px] min-h-[44px] px-2 py-1 rounded-2xl transition-all duration-200 active:scale-95 ${
+            className={`relative flex flex-col items-center justify-center min-w-[56px] min-h-[44px] px-2 py-1 rounded-2xl transition-all duration-200 active:scale-95 cursor-pointer ${
               isActive
                 ? 'text-purple-600 dark:text-purple-400 font-bold'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -70,25 +66,20 @@ export const MobileBottomNav: React.FC = () => {
               <span className="absolute inset-0 bg-purple-50 dark:bg-purple-950/60 rounded-2xl -z-10 animate-fade-in border border-purple-200/50 dark:border-purple-800/40" />
             )}
             {displayAvatar ? (
-              <div className="relative">
-                <img 
-                  src={displayAvatar} 
-                  alt="Profil" 
-                  className={`w-5 h-5 rounded-full object-cover ring-1.5 ${
-                    isActive 
-                      ? 'ring-purple-600 dark:ring-purple-400 scale-110' 
-                      : 'ring-slate-300 dark:ring-slate-700'
-                  }`} 
-                />
-                {!currentUser && lastSavedAccount && (
-                  <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-white dark:ring-slate-900" />
-                )}
-              </div>
+              <img 
+                src={displayAvatar} 
+                alt="Profil" 
+                className={`w-5 h-5 rounded-full object-cover ring-1.5 ${
+                  isActive 
+                    ? 'ring-purple-600 dark:ring-purple-400 scale-110' 
+                    : 'ring-slate-300 dark:ring-slate-700'
+                }`} 
+              />
             ) : (
               <UserIcon className={`w-5 h-5 transition-transform ${isActive ? 'scale-110' : ''}`} />
             )}
             <span className="text-[10px] mt-0.5 tracking-tight truncate max-w-[56px]">
-              {currentUser ? 'Profil' : lastSavedAccount ? 'Oturum' : 'Giriş'}
+              {currentUser ? 'Profil' : 'Giriş'}
             </span>
           </button>
         );

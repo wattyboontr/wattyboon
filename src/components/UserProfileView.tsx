@@ -40,10 +40,8 @@ import {
   EyeOff,
   Palette,
   Layers,
-  Save,
-  History
+  Save
 } from 'lucide-react';
-import { getSavedDeviceAccounts } from '../lib/deviceAccounts';
 
 const PRESET_AVATARS = [
   { id: '1', name: 'Atlas Bot', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Atlas' },
@@ -88,8 +86,6 @@ export const UserProfileView: React.FC = () => {
     isAdmin
   } = useApp();
 
-  const savedAccounts = !currentUser ? getSavedDeviceAccounts() : [];
-
   // If user is not logged in and not viewing a specific other author's profile, render guest login callout
   if (!currentUser && (!activeAuthorId || activeAuthorId === '')) {
     return (
@@ -108,71 +104,13 @@ export const UserProfileView: React.FC = () => {
             </p>
           </div>
 
-          {/* PREVIOUS SESSION QUICK LOGIN LIST */}
-          {savedAccounts.length > 0 && (
-            <div className="p-4 rounded-2xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-900/60 text-left space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                  <History className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                  Bu Cihazdaki Önceki Oturumlarınız
-                </span>
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full">
-                  1 Tıkla Giriş
-                </span>
-              </div>
-
-              <div className="space-y-2">
-                {savedAccounts.slice(0, 3).map((acc) => (
-                  <div
-                    key={acc.id || acc.email}
-                    onClick={async () => {
-                      if (acc.authProvider === 'google' || acc.email.toLowerCase().includes('gmail')) {
-                        await loginWithGoogle(acc.email, acc.name);
-                      } else {
-                        await login(acc.email || acc.username);
-                      }
-                    }}
-                    className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-white dark:bg-slate-800/90 border border-purple-100 dark:border-purple-900/60 hover:border-purple-400 hover:shadow-md hover:bg-purple-50/40 dark:hover:bg-purple-950/40 transition-all cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="relative shrink-0">
-                        <img
-                          src={acc.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${acc.username || acc.email}`}
-                          alt={acc.name}
-                          className="w-11 h-11 rounded-full object-cover border-2 border-purple-200 dark:border-purple-800 shadow-xs"
-                        />
-                        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-800" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate group-hover:text-purple-600 dark:group-hover:text-purple-400">
-                          {acc.name}
-                        </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                          @{acc.username || acc.email.split('@')[0]} • {acc.email}
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 group-hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all shrink-0 cursor-pointer"
-                    >
-                      <LogIn className="w-3.5 h-3.5" />
-                      <span>Oturumu Aç</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
             <button
               onClick={() => setIsAuthModalOpen(true)}
               className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-xs shadow-lg shadow-purple-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               <LogIn className="w-4 h-4" /> 
-              {savedAccounts.length > 0 ? 'Farklı Bir Hesapla Giriş Yap / Kaydol' : 'Giriş Yap / Ücretsiz Kaydol'}
+              Giriş Yap / Ücretsiz Kaydol
             </button>
             <button
               onClick={() => setActiveView('explore')}

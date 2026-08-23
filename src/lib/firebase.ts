@@ -449,6 +449,7 @@ export async function firebaseLogoutUser(): Promise<void> {
   try {
     await signOut(auth);
     localStorage.removeItem('wattyboon_current_user_id');
+    localStorage.removeItem('wattyboon_active_user');
   } catch (err) {
     console.warn('Firebase logout error:', err);
   }

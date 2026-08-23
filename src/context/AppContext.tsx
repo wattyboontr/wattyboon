@@ -26,7 +26,6 @@ import {
   INITIAL_NOTIFICATIONS, 
   INITIAL_MESSAGES 
 } from '../data/mockData';
-import { addSavedDeviceAccount, removeSavedDeviceAccount } from '../lib/deviceAccounts';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
   auth,
@@ -370,18 +369,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [users, setUsers] = useState<User[]>(() => {
     try {
       const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}users`);
-      const parsed: User[] = saved ? JSON.parse(saved) : INITIAL_USERS;
+      let parsed: User[] = saved ? JSON.parse(saved) : INITIAL_USERS;
+      const activeUserRaw = localStorage.getItem('wattyboon_active_user');
+      if (activeUserRaw) {
+        try {
+          const activeUser = JSON.parse(activeUserRaw);
+          if (activeUser && activeUser.id) {
+            parsed = [activeUser, ...parsed.filter((u) => u.id !== activeUser.id)];
+          }
+        } catch {}
+      }
       return parsed.map(normalizeUser).filter((u) => !isBannedUser(u));
     } catch {
       return INITIAL_USERS.map(normalizeUser);
     }
   });
 
-  // Current logged in user
+  // Current logged in user (Single persistent account)
   const [currentUserId, setCurrentUserId] = useState<string>(() => {
     try {
-      const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}current_user_id`);
-      return saved !== null ? saved : '';
+      const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}current_user_id`) || localStorage.getItem('wattyboon_current_user_id');
+      if (saved) return saved;
+      const activeUserRaw = localStorage.getItem('wattyboon_active_user');
+      if (activeUserRaw) {
+        const activeUser = JSON.parse(activeUserRaw);
+        if (activeUser && activeUser.id) return activeUser.id;
+      }
+      return '';
     } catch {
       return '';
     }
@@ -400,15 +414,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     try {
       localStorage.setItem(`${LOCAL_STORAGE_PREFIX}current_user_id`, currentUserId);
+      if (currentUserId) {
+        localStorage.setItem('wattyboon_current_user_id', currentUserId);
+      } else {
+        localStorage.removeItem('wattyboon_current_user_id');
+        localStorage.removeItem('wattyboon_active_user');
+      }
       if (currentUser) {
-        addSavedDeviceAccount({
-          id: currentUser.id,
-          name: currentUser.name,
-          username: currentUser.username,
-          email: currentUser.email,
-          avatar: currentUser.avatar,
-          role: currentUser.role,
-        });
+        localStorage.setItem('wattyboon_active_user', JSON.stringify(currentUser));
       }
     } catch (e) {
       console.warn('localStorage setItem current_user_id error:', e);
@@ -420,6 +433,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
       if (fbUser) {
         setCurrentUserId(fbUser.uid);
+        localStorage.setItem('wattyboon_current_user_id', fbUser.uid);
       }
     });
     return () => unsubscribe();
@@ -1361,7 +1375,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Oturum açmış kullanıcı bulunamadı.' };
     }
     const userIdToDelete = currentUser.id;
-    removeSavedDeviceAccount(userIdToDelete);
+    try {
+      localStorage.removeItem('wattyboon_active_user');
+      localStorage.removeItem('wattyboon_current_user_id');
+      localStorage.removeItem(`${LOCAL_STORAGE_PREFIX}current_user_id`);
+    } catch {}
     await deleteUserDataCascade(userIdToDelete);
     await firebaseLogoutUser();
     setCurrentUserId('');
@@ -1371,16 +1389,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const logout = () => {
-    if (currentUser) {
-      addSavedDeviceAccount({
-        id: currentUser.id,
-        name: currentUser.name,
-        username: currentUser.username,
-        email: currentUser.email,
-        avatar: currentUser.avatar,
-        role: currentUser.role,
-      });
-    }
+    try {
+      localStorage.removeItem('wattyboon_active_user');
+      localStorage.removeItem('wattyboon_current_user_id');
+      localStorage.removeItem(`${LOCAL_STORAGE_PREFIX}current_user_id`);
+    } catch {}
     firebaseLogoutUser();
     setCurrentUserId('');
     setIsAuthModalOpen(false);
