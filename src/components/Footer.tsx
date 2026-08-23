@@ -1,7 +1,7 @@
 import React from 'react';
 import { WattyboonLogo } from './WattyboonLogo';
 import { InfoTabType } from './InfoModal';
-import { BookOpen, Compass, PenTool, Bookmark, Heart, Grid, MessageSquare, Mail, Instagram, MessageCircle } from 'lucide-react';
+import { BookOpen, Compass, PenTool, Bookmark, Heart, Grid, MessageSquare, Mail, Instagram, MessageCircle, Info, HelpCircle, ShieldCheck, Map } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 interface FooterProps {
@@ -9,7 +9,7 @@ interface FooterProps {
 }
 
 export const Footer: React.FC<FooterProps> = ({ onOpenInfoModal }) => {
-  const { setActiveView, openStoryEditor, setSelectedCategoryFilter } = useApp();
+  const { setActiveView, openStoryEditor } = useApp();
 
   return (
     <footer className="w-full bg-white dark:bg-slate-950 border-t border-slate-200/80 dark:border-slate-800/80 transition-colors duration-200 py-10 mt-12 mb-16 md:mb-0">
@@ -32,7 +32,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenInfoModal }) => {
             </p>
           </div>
 
-          {/* Platform Navigation */}
+          {/* Platform Navigation - Gezinme & Keşif */}
           <div className="space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
               Gezinme & Keşif
@@ -41,59 +41,57 @@ export const Footer: React.FC<FooterProps> = ({ onOpenInfoModal }) => {
               <li>
                 <button 
                   onClick={() => {
-                    setActiveView('home');
-                  }} 
-                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  Ana Sayfa
-                </button>
-              </li>
-              <li>
-                <button 
-                  onClick={() => {
                     setActiveView('explore');
                   }} 
                   className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Compass className="w-3.5 h-3.5" /> Keşfet
+                  <Compass className="w-3.5 h-3.5 text-purple-500" /> Keşfet
                 </button>
               </li>
               <li>
                 <button 
                   onClick={() => setActiveView('categories')} 
-                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5"
+                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Grid className="w-3.5 h-3.5" /> Tüm Kategoriler
+                  <Grid className="w-3.5 h-3.5 text-indigo-500" /> Tüm Kategoriler
                 </button>
               </li>
               <li>
                 <button 
                   onClick={() => setActiveView('library')} 
-                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5"
+                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Bookmark className="w-3.5 h-3.5" /> Okuma Listelerim
+                  <Bookmark className="w-3.5 h-3.5 text-blue-500" /> Okuma Listelerim
                 </button>
               </li>
               <li>
                 <button 
                   onClick={() => setActiveView('forum')} 
-                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5"
+                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
-                  <MessageSquare className="w-3.5 h-3.5" /> Topluluk ve Forum
+                  <MessageSquare className="w-3.5 h-3.5 text-emerald-500" /> Topluluk ve Forum
                 </button>
               </li>
               <li>
                 <button 
                   onClick={() => openStoryEditor(null)} 
-                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5"
+                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
-                  <PenTool className="w-3.5 h-3.5" /> Hikaye Yayınla
+                  <PenTool className="w-3.5 h-3.5 text-amber-500" /> Hikaye Yayınla
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={() => setActiveView('sitemap')} 
+                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Map className="w-3.5 h-3.5 text-teal-500" /> Site Haritası
                 </button>
               </li>
             </ul>
           </div>
 
-          {/* Support */}
+          {/* Support - Destek */}
           <div className="space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
               Destek
@@ -102,41 +100,33 @@ export const Footer: React.FC<FooterProps> = ({ onOpenInfoModal }) => {
               <li>
                 <button 
                   onClick={() => onOpenInfoModal('about')} 
-                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors"
+                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
-                  Hakkımızda
+                  <Info className="w-3.5 h-3.5 text-sky-500" /> Hakkımızda
                 </button>
               </li>
               <li>
                 <button 
                   onClick={() => onOpenInfoModal('help')} 
-                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors"
+                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
-                  Yardım & SSS
+                  <HelpCircle className="w-3.5 h-3.5 text-violet-500" /> Yardım & SSS
                 </button>
               </li>
               <li>
                 <button 
                   onClick={() => onOpenInfoModal('privacy')} 
-                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors"
+                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
-                  Gizlilik Politikası
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Gizlilik Politikası
                 </button>
               </li>
               <li>
                 <button 
                   onClick={() => onOpenInfoModal('contact')} 
-                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors font-medium text-purple-600 dark:text-purple-400"
+                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
-                  İletişim Formu
-                </button>
-              </li>
-              <li>
-                <button 
-                  onClick={() => setActiveView('sitemap')} 
-                  className="hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300"
-                >
-                  Site Haritası
+                  <Mail className="w-3.5 h-3.5 text-rose-500" /> İletişim Formu
                 </button>
               </li>
             </ul>

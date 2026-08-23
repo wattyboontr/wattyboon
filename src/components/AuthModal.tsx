@@ -20,10 +20,10 @@ import {
   Plus
 } from 'lucide-react';
 import { 
-  authSendVerificationCode as authSendVerificationCode, 
-  authVerifyCode as authVerifyCode, 
-  authResetPassword as authResetPassword 
-} from '../lib/cloudflare';
+  authSendVerificationCode, 
+  authVerifyCode, 
+  authResetPassword 
+} from '../lib/firebase';
 import { 
   getSavedDeviceAccounts, 
   removeSavedDeviceAccount, 
@@ -312,34 +312,26 @@ export const AuthModal: React.FC = () => {
     }
   };
 
-  // Handle Specific Google Account Selection - Sends OTP code to that email immediately!
-  const handleSelectGoogleProfile = async (targetEmail: string, targetName: string) => {
-    const trimmedEmail = targetEmail.trim().toLowerCase();
-    const trimmedName = targetName.trim() || trimmedEmail.split('@')[0];
-
-    setEmail(trimmedEmail);
-    setName(trimmedName);
-    setUsername(trimmedEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, ''));
+  // Handle Google Login: Standard direct sign-in or account click
+  const handleGoogleLoginDirect = async (targetEmail?: string, targetName?: string) => {
     setLoading(true);
     setErrorMsg('');
     setSuccessMsg('');
 
-    // Immediately send 6-digit OTP code to the selected Google account
-    const sendRes = await authSendVerificationCode(trimmedEmail);
-    setLoading(false);
-
-    if (sendRes.success) {
-      setCodeSent(true);
-      setPendingAction('google_otp');
-      setActiveTab('otp_verify');
-      if (sendRes.localCode) {
-        setOtpCode(sendRes.localCode);
-        setSuccessMsg(`Google onay kodunuz (${sendRes.localCode}) ${trimmedEmail} adresinize gönderildi. Lütfen kodu giriniz.`);
+    try {
+      const gRes = await loginWithGoogle(targetEmail, targetName);
+      setLoading(false);
+      if (gRes.success) {
+        setIsAuthModalOpen(false);
+        setAutoOpenProfileSettings(true);
+        setActiveView('profile');
+        resetForm();
       } else {
-        setSuccessMsg(`Google onay kodu ${trimmedEmail} adresinize iletildi. Lütfen gelen 6 haneli güvenlik kodunu giriniz.`);
+        setErrorMsg(gRes.error || 'Google ile giriş tamamlanamadı.');
       }
-    } else {
-      setErrorMsg(sendRes.error || 'Onay kodu gönderilemedi. Lütfen tekrar deneyiniz.');
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMsg(err.message || 'Google girişi sırasında bir hata oluştu.');
     }
   };
 
@@ -354,7 +346,7 @@ export const AuthModal: React.FC = () => {
       return;
     }
 
-    await handleSelectGoogleProfile(gEmail, gName);
+    await handleGoogleLoginDirect(gEmail, gName);
   };
 
   const resetForm = () => {
@@ -389,14 +381,14 @@ export const AuthModal: React.FC = () => {
           <div className="flex items-center gap-2 mb-1">
             <span className="text-3xl font-bold font-logo text-white drop-shadow-md">WattyBoon</span>
             <span className="px-2 py-0.5 rounded-full bg-white/20 text-[10px] font-bold tracking-wider uppercase backdrop-blur-xs">
-              Firebase Güvenlikli
+              Güvenli Giriş
             </span>
           </div>
           
           <p className="text-xs text-purple-100 mt-1 flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-emerald-300" />
             {activeTab === 'google_select'
-              ? 'Devam etmek istediğiniz Google hesabını seçiniz.'
+              ? 'Google hesabınızı seçerek tek tıkla doğrudan giriş yapın.'
               : activeTab === 'otp_verify'
               ? 'E-posta adresinize gönderilen güvenlik kodunu doğrulayın.'
               : activeTab === 'forgot'
@@ -462,8 +454,8 @@ export const AuthModal: React.FC = () => {
                   </svg>
                 </div>
                 <div className="min-w-0">
-                  <h4 className="font-bold text-slate-900 dark:text-slate-100 text-xs">Google ile Devam Et</h4>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Hesabınızı seçin; e-postanıza iletilecek onay koduyla anında giriş yapın</p>
+                  <h4 className="font-bold text-slate-900 dark:text-slate-100 text-xs">Google ile Oturum Aç</h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Google hesabınızı seçerek doğrudan hızlıca giriş yapın</p>
                 </div>
               </div>
 
@@ -474,7 +466,7 @@ export const AuthModal: React.FC = () => {
                     key={gAcc.id}
                     type="button"
                     disabled={loading}
-                    onClick={() => handleSelectGoogleProfile(gAcc.email, gAcc.name)}
+                    onClick={() => handleGoogleLoginDirect(gAcc.email, gAcc.name)}
                     className="w-full p-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 hover:border-purple-500 dark:hover:border-purple-500 hover:bg-purple-50/40 dark:hover:bg-purple-950/30 transition-all flex items-center justify-between text-left group cursor-pointer shadow-xs disabled:opacity-50"
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -510,7 +502,7 @@ export const AuthModal: React.FC = () => {
 
                     <div className="shrink-0 ml-2">
                       <span className="px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 font-bold text-[11px] group-hover:bg-purple-600 group-hover:text-white transition-all inline-flex items-center gap-1">
-                        Kodu Gönder <ArrowRight className="w-3 h-3" />
+                        Giriş Yap <ArrowRight className="w-3 h-3" />
                       </span>
                     </div>
                   </button>
@@ -526,7 +518,7 @@ export const AuthModal: React.FC = () => {
                     className="w-full py-2.5 px-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-purple-500 text-slate-600 dark:text-slate-300 hover:text-purple-600 dark:hover:text-purple-400 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
-                    <span>Farklı Bir Google Hesabı Kullan</span>
+                    <span>Farklı Bir Google Hesabı ile Giriş Yap</span>
                   </button>
                 ) : (
                   <form onSubmit={handleCustomGoogleSubmit} className="space-y-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-purple-200 dark:border-purple-900 animate-fade-in">
@@ -567,8 +559,8 @@ export const AuthModal: React.FC = () => {
                       disabled={loading}
                       className="w-full py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
                     >
-                      {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      <span>Bu Google Hesabına Onay Kodu Gönder</span>
+                      {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
+                      <span>Bu Hesap ile Giriş Yap</span>
                     </button>
                   </form>
                 )}
@@ -591,7 +583,7 @@ export const AuthModal: React.FC = () => {
             <div className="space-y-3">
               <button
                 type="button"
-                onClick={() => { setActiveTab('google_select'); setErrorMsg(''); setSuccessMsg(''); }}
+                onClick={() => handleGoogleLoginDirect()}
                 disabled={loading}
                 className="w-full py-3 px-4 rounded-xl bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 hover:border-purple-500 dark:hover:border-purple-500 hover:bg-purple-50/30 dark:hover:bg-slate-700/50 text-slate-800 dark:text-slate-100 font-bold text-xs shadow-sm flex items-center justify-center gap-3 transition-all cursor-pointer disabled:opacity-60"
               >
@@ -601,7 +593,7 @@ export const AuthModal: React.FC = () => {
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                 </svg>
-                <span>Google ile Profil Seç ve Giriş Yap</span>
+                <span>{loading ? 'Giriş Yapılıyor...' : 'Google ile Giriş Yap'}</span>
               </button>
 
               <div className="relative flex items-center justify-center my-2">
@@ -1035,7 +1027,7 @@ export const AuthModal: React.FC = () => {
             Tüm üyelere sınırsız hikaye yazma hakkı
           </span>
           <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold">
-            WattyBoon Firebase Engine
+            WattyBoon
           </span>
         </div>
 

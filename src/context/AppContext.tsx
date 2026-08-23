@@ -27,7 +27,9 @@ import {
   INITIAL_MESSAGES 
 } from '../data/mockData';
 import { addSavedDeviceAccount, removeSavedDeviceAccount } from '../lib/deviceAccounts';
+import { onAuthStateChanged } from 'firebase/auth';
 import {
+  auth,
   fetchStoriesFromFirebase,
   fetchUsersFromFirebase,
   fetchNotificationsFromFirebase,
@@ -56,7 +58,7 @@ import {
   firebaseRegisterUser,
   firebasePasswordReset,
   firebaseLogoutUser
-} from '../lib/dummyFirebase';
+} from '../lib/firebase';
 
 export type { ViewType };
 
@@ -413,10 +415,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUserId, currentUser]);
 
-  // Initial Auth Session Check - Removed Firebase Auth
+  // Initial Auth Session Check with Firebase Auth
   useEffect(() => {
-    // Firebase Auth is removed. 
-    // Auth state now handled locally via currentUserId.
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      if (fbUser) {
+        setCurrentUserId(fbUser.uid);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Firebase Users Listener & Poller (WattyBoon Firebase Engine)
+  useEffect(() => {
+    let isMounted = true;
+    const loadUsers = async () => {
+      try {
+        const fbUsers = await fetchUsersFromFirebase();
+        if (isMounted && Array.isArray(fbUsers) && fbUsers.length > 0) {
+          setUsers((prev) => {
+            const map = new Map<string, User>();
+            // Keep local users first
+            prev.forEach((u) => map.set(u.id, u));
+            // Merge in Firebase users
+            fbUsers.forEach((u) => {
+              map.set(u.id, normalizeUser(u));
+            });
+            return Array.from(map.values()).filter((u) => !isBannedUser(u));
+          });
+        }
+      } catch (err) {
+        console.warn('[Firebase Users Sync] Load notice:', err);
+      }
+    };
+    loadUsers();
+    const interval = setInterval(loadUsers, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   // Stories state (Stored in Firebase Firestore & Realtime DB - wattyboon-94c69)
@@ -1246,10 +1282,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const loginWithGoogle = async (customEmail?: string, customName?: string): Promise<{ success: boolean; error?: string; domainError?: boolean }> => {
     try {
-      const targetEmail = customEmail || 'semajim30@gmail.com';
-      const targetName = customName || 'Sema';
-
-      const res = await firebaseGoogleLoginUser(targetEmail, targetName);
+      const res = await firebaseGoogleLoginUser(customEmail, customName);
       if (res.success && res.user) {
         const u = res.user;
         setUsers((prev) => [...prev.filter((item) => item.id !== u.id), u]);

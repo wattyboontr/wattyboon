@@ -1,8 +1,6 @@
-// Comments & Discussion Storage Engine (Local-first + Cloudflare Sync)
-// Firebase dependencies removed temporarily until Cloudflare Worker setup is complete.
-// import { db, rtdb } from './firebase';
-// import { collection, doc, getDocs, setDoc, deleteDoc, query, where } from 'firebase/firestore';
-// import { ref, set, get, child, remove } from 'firebase/database';
+import { db, rtdb } from './firebase';
+import { collection, doc, getDocs, setDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { ref, set, get, child, remove } from 'firebase/database';
 
 export interface StoryCommentRow {
   id: string;
@@ -47,12 +45,54 @@ export async function fetchComments(
     console.warn('Comments local cache read notice:', e);
   }
 
-  // Firebase integration removed temporarily.
+  // 2. Fetch from Firebase Firestore
+  try {
+    const q = query(
+      collection(db, 'story_comments'),
+      where('story_id', '==', storyId),
+      where('chapter_index', '==', chapterIndex)
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const fbList: StoryCommentRow[] = [];
+      snap.forEach((d) => fbList.push(d.data() as StoryCommentRow));
+      
+      fbList.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(fbList));
+      } catch {}
+
+      return fbList;
+    }
+  } catch (err) {
+    console.warn('[Firebase Comments] Firestore fetch notice:', err);
+  }
+
+  // 3. Fallback to Firebase Realtime Database
+  try {
+    const safeStoryKey = storyId.replace(/[.#$[\]]/g, '_');
+    const rtdbSnap = await get(child(ref(rtdb), `story_comments/${safeStoryKey}/${chapterIndex}`));
+    if (rtdbSnap.exists()) {
+      const data = rtdbSnap.val();
+      const fbList = Object.values(data) as StoryCommentRow[];
+      fbList.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(fbList));
+      } catch {}
+
+      return fbList;
+    }
+  } catch (err) {
+    console.warn('[Firebase Comments] RTDB fetch notice:', err);
+  }
+
   return localComments.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 /**
- * Insert a new comment and back it up to Firebase.
+ * Insert a new comment and back it up to Firebase Firestore & RTDB.
  */
 export async function insertComment(payload: {
   storyId: string;
@@ -106,8 +146,21 @@ export async function insertComment(payload: {
     console.warn('Cache update notice:', e);
   }
 
-  // Firebase integration removed temporarily.
-  
+  // 2. Persist to Firebase Firestore
+  try {
+    await setDoc(doc(db, 'story_comments', newRow.id), newRow);
+  } catch (err) {
+    console.warn('[Firebase Comments] Firestore save notice:', err);
+  }
+
+  // 3. Persist to Firebase Realtime Database
+  try {
+    const safeStoryKey = payload.storyId.replace(/[.#$[\]]/g, '_');
+    await set(ref(rtdb, `story_comments/${safeStoryKey}/${payload.chapterIndex}/${newRow.id}`), newRow);
+  } catch (err) {
+    console.warn('[Firebase Comments] RTDB save notice:', err);
+  }
+
   return newRow;
 }
 
@@ -121,7 +174,38 @@ export async function toggleLikeComment(
   storyId?: string,
   chapterIndex?: number
 ): Promise<boolean> {
-  // Firebase integration removed temporarily.
+  const isLiked = currentLikedBy.includes(userId);
+  const newLikedBy = isLiked
+    ? currentLikedBy.filter((id) => id !== userId)
+    : [...currentLikedBy, userId];
+  const newLikesCount = newLikedBy.length;
+
+  if (storyId && chapterIndex !== undefined) {
+    const cacheKey = `${STORAGE_PREFIX}${storyId}_${chapterIndex}`;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const list: StoryCommentRow[] = JSON.parse(cached);
+        const updated = list.map((c) =>
+          c.id === commentId ? { ...c, liked_by: newLikedBy, likes_count: newLikesCount } : c
+        );
+        localStorage.setItem(cacheKey, JSON.stringify(updated));
+      }
+    } catch {}
+  }
+
+  try {
+    await setDoc(doc(db, 'story_comments', commentId), { liked_by: newLikedBy, likes_count: newLikesCount }, { merge: true });
+  } catch (e) {}
+
+  if (storyId && chapterIndex !== undefined) {
+    try {
+      const safeStoryKey = storyId.replace(/[.#$[\]]/g, '_');
+      await set(ref(rtdb, `story_comments/${safeStoryKey}/${chapterIndex}/${commentId}/liked_by`), newLikedBy);
+      await set(ref(rtdb, `story_comments/${safeStoryKey}/${chapterIndex}/${commentId}/likes_count`), newLikesCount);
+    } catch (e) {}
+  }
+
   return true;
 }
 
@@ -133,6 +217,28 @@ export async function deleteComment(
   storyId?: string,
   chapterIndex?: number
 ): Promise<boolean> {
-  // Firebase integration removed temporarily.
+  if (storyId && chapterIndex !== undefined) {
+    const cacheKey = `${STORAGE_PREFIX}${storyId}_${chapterIndex}`;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const list: StoryCommentRow[] = JSON.parse(cached);
+        const updated = list.filter((c) => c.id !== commentId && c.parent_id !== commentId);
+        localStorage.setItem(cacheKey, JSON.stringify(updated));
+      }
+    } catch {}
+  }
+
+  try {
+    await deleteDoc(doc(db, 'story_comments', commentId));
+  } catch (e) {}
+
+  if (storyId && chapterIndex !== undefined) {
+    try {
+      const safeStoryKey = storyId.replace(/[.#$[\]]/g, '_');
+      await remove(ref(rtdb, `story_comments/${safeStoryKey}/${chapterIndex}/${commentId}`));
+    } catch (e) {}
+  }
+
   return true;
 }

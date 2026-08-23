@@ -217,47 +217,46 @@ app.get('/api/formspree/submissions', async (req, res) => {
 });
 
 // ==========================================
-// SECURE AUTHENTICATION API ROUTES (Stubbed - Pending Cloudflare Worker Implementation)
+// IMGBB IMAGE UPLOAD PROXY ENDPOINT
 // ==========================================
+app.post('/api/imgbb/upload', async (req, res) => {
+  try {
+    const { imageBase64, originalName } = req.body;
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'Görsel verisi bulunamadı.' });
+    }
 
-// 1. REGISTER
-app.post('/api/auth/register', async (req, res) => {
-  return res.status(501).json({ error: 'Auth service not yet implemented.' });
-});
+    const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z+]+;base64,/, '');
+    const apiKey = process.env.IMGBB_API_KEY || 'ab2e5f162e826273cb3649b55debc0bd';
 
-// 2. LOGIN
-app.post('/api/auth/login', async (req, res) => {
-  return res.status(501).json({ error: 'Auth service not yet implemented.' });
-});
+    const formData = new URLSearchParams();
+    formData.append('image', cleanBase64);
+    if (originalName) {
+      formData.append('name', originalName.replace(/\.[^/.]+$/, ''));
+    }
 
-// 3. GOOGLE SECURE LOGIN
-app.post('/api/auth/google-login', async (req, res) => {
-  return res.status(501).json({ error: 'Auth service not yet implemented.' });
-});
+    const imgbbRes = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
+      method: 'POST',
+      body: formData,
+    });
 
-// 4. GET CURRENT USER (Session verification)
-app.get('/api/auth/me', (req, res) => {
-  return res.status(501).json({ error: 'Auth service not yet implemented.' });
-});
+    if (!imgbbRes.ok) {
+      const errText = await imgbbRes.text();
+      console.warn('ImgBB API error response:', errText);
+      return res.status(502).json({ error: 'ImgBB servisine yükleme yapılamadı.' });
+    }
 
-// 5. SEND OTP / VERIFICATION CODE
-app.post('/api/auth/send-code', async (req, res) => {
-  return res.status(501).json({ error: 'Auth service not yet implemented.' });
-});
+    const result = await imgbbRes.json();
+    if (result.success && result.data) {
+      const url = result.data.url || result.data.display_url || result.data.image?.url;
+      return res.json({ success: true, url, data: result.data });
+    }
 
-// 6. VERIFY OTP CODE
-app.post('/api/auth/verify-code', (req, res) => {
-  return res.status(501).json({ error: 'Auth service not yet implemented.' });
-});
-
-// 7. PASSWORD RESET
-app.post('/api/auth/reset-password', async (req, res) => {
-  return res.status(501).json({ error: 'Auth service not yet implemented.' });
-});
-
-// 8. LOGOUT
-app.post('/api/auth/logout', (req, res) => {
-  return res.json({ success: true, message: 'Başarıyla çıkış yapıldı.' });
+    return res.status(500).json({ error: 'Görsel URL alınamadı.' });
+  } catch (err: any) {
+    console.error('ImgBB Upload Proxy Error:', err);
+    return res.status(500).json({ error: err.message || 'Görsel yüklenirken hata oluştu.' });
+  }
 });
 
 

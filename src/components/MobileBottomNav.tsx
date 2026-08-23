@@ -90,9 +90,6 @@ export const MobileBottomNav: React.FC = () => {
             <span className="text-[10px] mt-0.5 tracking-tight truncate max-w-[56px]">
               {currentUser ? 'Profil' : lastSavedAccount ? 'Oturum' : 'Giriş'}
             </span>
-            {isActive && (
-              <span className="w-1 h-1 rounded-full bg-purple-600 dark:bg-purple-400 mt-0.5" />
-            )}
           </button>
         );
       },
@@ -126,9 +123,6 @@ export const MobileBottomNav: React.FC = () => {
               )}
               <Icon className={`w-5 h-5 transition-transform ${item.isActive ? 'scale-110' : ''}`} />
               <span className="text-[10px] mt-0.5 tracking-tight">{item.label}</span>
-              {item.isActive && (
-                <span className="w-1 h-1 rounded-full bg-purple-600 dark:bg-purple-400 mt-0.5" />
-              )}
             </button>
           );
         })}
