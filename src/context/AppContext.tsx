@@ -1,0 +1,2681 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { 
+  Story, 
+  User, 
+  UserRole,
+  AppNotification, 
+  Category, 
+  Visibility, 
+  DirectMessage, 
+  CustomList, 
+  ReadingProgress, 
+  ParagraphComment, 
+  Comment, 
+  ForumTopic, 
+  ForumReply, 
+  ViewType, 
+  ArchivedStory, 
+  ArchivedStoryComment,
+  StoryReport,
+  ReportReason,
+  ReportStatus
+} from '../types';
+import { 
+  INITIAL_STORIES, 
+  INITIAL_USERS, 
+  INITIAL_NOTIFICATIONS, 
+  INITIAL_MESSAGES 
+} from '../data/mockData';
+import { addSavedDeviceAccount, removeSavedDeviceAccount } from '../lib/deviceAccounts';
+import {
+  fetchStoriesFromFirebase,
+  fetchUsersFromFirebase,
+  fetchNotificationsFromFirebase,
+  fetchMessagesFromFirebase,
+  fetchReportsFromFirebase,
+  fetchForumTopicsFromFirebase,
+  fetchParagraphCommentsFromFirebase,
+  saveStoryToFirebase,
+  saveUserToFirebase,
+  saveNotificationToFirebase,
+  saveMessageToFirebase,
+  saveReportToFirebase,
+  saveForumTopicToFirebase,
+  saveParagraphCommentToFirebase,
+  saveCommentToFirebase,
+  deleteStoryFromFirebase,
+  deleteUserFromFirebase,
+  deleteForumTopicFromFirebase,
+  deleteParagraphCommentFromFirebase,
+  deleteReportFromFirebase,
+  deleteCommentFromFirebase,
+  sendCommentEmailNotification,
+  sendMessageEmailNotification,
+  firebaseGoogleLoginUser,
+  firebaseLoginUser,
+  firebaseRegisterUser,
+  firebasePasswordReset,
+  firebaseLogoutUser
+} from '../lib/dummyFirebase';
+
+export type { ViewType };
+
+export interface ProfileUpdateData {
+  name?: string;
+  username?: string;
+  email?: string;
+  bio?: string;
+  avatar?: string;
+  coverUrl?: string;
+}
+
+interface AppContextType {
+  // Theme
+  isDarkMode: boolean;
+  toggleDarkMode: () => void;
+
+  // NSFW (+18) Content Toggle
+  isNsfwEnabled: boolean;
+  toggleNsfw: () => void;
+
+  // Global Category & Tag Filter State
+  selectedCategoryFilter: Category | 'Tümü';
+  setSelectedCategoryFilter: (category: Category | 'Tümü') => void;
+  selectedTagFilter?: string;
+  setSelectedTagFilter: (tag: string | undefined) => void;
+
+  // Auth & User
+  currentUser: User | null;
+  users: User[];
+  loginWithGoogle: (customEmail?: string, customName?: string) => Promise<{ success: boolean; error?: string; domainError?: boolean }>;
+  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  register: (name: string, username: string, email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  sendPasswordReset: (email: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+  changePassword: (newPassword: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+  deleteAccount: () => Promise<{ success: boolean; message?: string; error?: string }>;
+  logout: () => void;
+  switchDemoUser: (userId: string) => void;
+  updateProfile: (
+    bioOrData: string | ProfileUpdateData,
+    name?: string,
+    avatar?: string,
+    coverUrl?: string,
+    username?: string,
+    email?: string
+  ) => Promise<{ success: boolean; error?: string; message?: string }>;
+
+  // Paragraph Comments (Metinler Arası Yorumlar)
+  paragraphComments: ParagraphComment[];
+  addParagraphComment: (storyId: string, chapterIndex: number, paragraphIndex: number, content: string, selectedText?: string) => void;
+  toggleLikeParagraphComment: (commentId: string) => void;
+  deleteParagraphComment: (commentId: string) => void;
+
+  // Navigation / Active Views
+  activeView: ViewType;
+  setActiveView: (view: ViewType) => void;
+  activeStoryId: string | null;
+  activeChapterIndex: number;
+  activeAuthorId: string | null;
+  editingStoryId: string | null;
+  openStoryDetail: (storyId: string) => void;
+  openStoryReader: (storyId: string, chapterIndex?: number) => void;
+  openAuthorProfile: (authorId: string) => void;
+  openStoryEditor: (storyId?: string | null) => void;
+
+  // Stories
+  stories: Story[];
+  saveStory: (storyData: Partial<Story>) => string;
+  deleteStory: (storyId: string) => void;
+  deleteChapter: (storyId: string, chapterIndex: number) => void;
+  toggleLikeStory: (storyId: string) => void;
+  toggleLikeChapter: (storyId: string, chapterIndex: number) => void;
+  addComment: (storyId: string, content: string) => void;
+  toggleLikeComment: (storyId: string, commentId: string) => void;
+  addReplyToComment: (storyId: string, parentCommentId: string, content: string) => void;
+  deleteComment: (storyId: string, commentId: string) => void;
+  incrementStoryReads: (storyId: string, chapterOrder: number) => void;
+
+  // Forum & Topluluk Tartışmaları
+  forumTopics: ForumTopic[];
+  addForumTopic: (title: string, category: ForumTopic['category'], content: string, tags?: string[]) => string;
+  deleteForumTopic: (topicId: string) => void;
+  addForumReply: (topicId: string, content: string) => void;
+  deleteForumReply: (topicId: string, replyId: string) => void;
+  toggleLikeForumTopic: (topicId: string) => void;
+  toggleLikeForumReply: (topicId: string, replyId: string) => void;
+
+  // Kayıp & Silinen Eserler Arşivi (PDF Arşivi)
+  archivedStories: ArchivedStory[];
+  addArchivedStory: (storyData: {
+    title: string;
+    originalAuthor: string;
+    chapterCount: string | number;
+    summary: string;
+    category?: Category | string;
+    tags?: string[];
+    pdfUrl: string;
+    pdfFileName?: string;
+    pdfFileSize?: string;
+    coverUrl?: string;
+  }) => Promise<{ success: boolean; id?: string; error?: string }>;
+  deleteArchivedStory: (archiveId: string) => void;
+  toggleLikeArchivedStory: (archiveId: string) => void;
+  addArchivedStoryComment: (archiveId: string, content: string) => void;
+  deleteArchivedStoryComment: (archiveId: string, commentId: string) => void;
+  incrementArchivedStoryDownloads: (archiveId: string) => void;
+
+  // Library
+  toggleLibraryStory: (storyId: string, status?: 'reading' | 'want_to_read' | 'completed' | 'favorite') => void;
+  isStoryInLibrary: (storyId: string) => boolean;
+
+  // Reading Progress (Okumaya Devam Et)
+  updateReadingProgress: (storyId: string, chapterIndex: number) => void;
+
+  // Custom Reading Lists (Özel Kütüphane Listeleri)
+  createCustomList: (name: string, description?: string) => string;
+  addStoryToCustomList: (listId: string, storyId: string) => void;
+  removeStoryFromCustomList: (listId: string, storyId: string) => void;
+  deleteCustomList: (listId: string) => void;
+
+  // Direct Messages (Takipçiler Arası Mesajlaşma)
+  messages: DirectMessage[];
+  unreadMessageCount: number;
+  sendDirectMessage: (receiverId: string, content: string) => void;
+  markMessagesAsRead: (senderId: string) => void;
+  isMessagingOpen: boolean;
+  activeMessagingUserId: string | null;
+  openMessagingWithUser: (userId?: string | null) => void;
+  closeMessaging: () => void;
+
+  // Social / Following
+  toggleFollowUser: (targetUserId: string) => void;
+
+  // Notifications
+  notifications: AppNotification[];
+  unreadNotificationCount: number;
+  markAsRead: (notificationId: string) => void;
+  markAllAsRead: () => void;
+
+  // Content Reporting & Moderation
+  reports: StoryReport[];
+  submitStoryReport: (reportData: {
+    storyId: string;
+    storyTitle: string;
+    storyCoverUrl?: string;
+    authorId: string;
+    authorName: string;
+    authorUsername?: string;
+    reason: ReportReason;
+    reasonTitle: string;
+    description: string;
+    originalSourceUrl?: string;
+  }) => Promise<{ success: boolean; message: string }>;
+  adminResolveReport: (reportId: string, status: ReportStatus, note?: string, deleteReportedStory?: boolean) => Promise<boolean>;
+  adminDeleteReport: (reportId: string) => Promise<boolean>;
+
+  // Admin & Moderation Controls
+  isAdmin: boolean;
+  updateUserRole: (targetUserId: string, newRole: UserRole) => void;
+  adminDeleteUser: (targetUserId: string, reason?: string) => { success: boolean; error?: string };
+  adminDeleteStory: (storyId: string, reason?: string) => void;
+  adminDeleteForumTopic: (topicId: string, reason?: string) => void;
+  adminDeleteForumReply: (topicId: string, replyId: string, reason?: string) => void;
+  adminDeleteComment: (storyId: string, commentId: string, reason?: string) => void;
+  adminTogglePinForumTopic: (topicId: string) => void;
+
+  // Modals & Settings Auto-Open
+  isAuthModalOpen: boolean;
+  setIsAuthModalOpen: (open: boolean) => void;
+  autoOpenProfileSettings: boolean;
+  setAutoOpenProfileSettings: (open: boolean) => void;
+}
+
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+const LOCAL_STORAGE_PREFIX = 'wattyboon_v5_';
+
+const toggleLikeCommentInList = (comments: Comment[], commentId: string, userId: string): Comment[] => {
+  return comments.map((c) => {
+    if (c.id === commentId) {
+      const hasLiked = c.likedBy.includes(userId);
+      const newLikedBy = hasLiked ? c.likedBy.filter((id) => id !== userId) : [...c.likedBy, userId];
+      return {
+        ...c,
+        likedBy: newLikedBy,
+        likes: newLikedBy.length,
+      };
+    }
+    if (c.replies && c.replies.length > 0) {
+      return {
+        ...c,
+        replies: toggleLikeCommentInList(c.replies, commentId, userId),
+      };
+    }
+    return c;
+  });
+};
+
+const addReplyToCommentInList = (comments: Comment[], parentCommentId: string, newReply: Comment): Comment[] => {
+  return comments.map((c) => {
+    if (c.id === parentCommentId) {
+      return {
+        ...c,
+        replies: [...(c.replies || []), newReply],
+      };
+    }
+    if (c.replies && c.replies.length > 0) {
+      return {
+        ...c,
+        replies: addReplyToCommentInList(c.replies, parentCommentId, newReply),
+      };
+    }
+    return c;
+  });
+};
+
+const deleteCommentFromList = (comments: Comment[], commentId: string): Comment[] => {
+  return comments
+    .filter((c) => c.id !== commentId)
+    .map((c) => ({
+      ...c,
+      replies: c.replies ? deleteCommentFromList(c.replies, commentId) : [],
+    }));
+};
+
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Theme state
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}dark_mode`);
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  useEffect(() => {
+    localStorage.setItem(`${LOCAL_STORAGE_PREFIX}dark_mode`, JSON.stringify(isDarkMode));
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      document.body.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.body.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
+  const toggleDarkMode = () => setIsDarkMode((prev) => !prev);
+
+  // NSFW (+18) Content State
+  const [isNsfwEnabled, setIsNsfwEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}nsfw_enabled`);
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  useEffect(() => {
+    localStorage.setItem(`${LOCAL_STORAGE_PREFIX}nsfw_enabled`, JSON.stringify(isNsfwEnabled));
+  }, [isNsfwEnabled]);
+
+  const toggleNsfw = () => setIsNsfwEnabled((prev) => !prev);
+
+  // Global Category & Tag Filter State
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<Category | 'Tümü'>('Tümü');
+  const [selectedTagFilter, setSelectedTagFilter] = useState<string | undefined>(undefined);
+
+  // Banned User filter
+  const BANNED_USERNAMES = ['semajim22', 'semantev7'];
+  const isBannedUser = (u: Partial<User> | null | undefined): boolean => {
+    if (!u) return false;
+    const cleanUName = (u.username || '').replace(/^@/, '').trim().toLowerCase();
+    return BANNED_USERNAMES.includes(cleanUName);
+  };
+
+  const normalizeUser = (u: any): User => {
+    if (!u) return u;
+    let readingProgress: ReadingProgress[] = [];
+    if (Array.isArray(u.readingProgress)) {
+      readingProgress = u.readingProgress;
+    } else if (u.readingProgress && typeof u.readingProgress === 'object') {
+      readingProgress = Object.entries(u.readingProgress).map(([storyId, val]: [string, any]) => {
+        if (val && typeof val === 'object') {
+          return {
+            storyId: val.storyId || storyId,
+            lastChapterIndex: typeof val.lastChapterIndex === 'number' ? val.lastChapterIndex : 0,
+            updatedAt: val.updatedAt || new Date().toISOString(),
+          };
+        }
+        return {
+          storyId,
+          lastChapterIndex: typeof val === 'number' ? val : 0,
+          updatedAt: new Date().toISOString(),
+        };
+      });
+    }
+
+    const isSuperAdmin = u.email?.toLowerCase() === 'semajim30@gmail.com' || u.email?.toLowerCase() === 'wattyboontr@gmail.com';
+    const role: UserRole = isSuperAdmin ? 'admin' : (u.role || 'user');
+
+    return {
+      ...u,
+      role,
+      readingProgress,
+      library: Array.isArray(u.library) ? u.library : [],
+      customLists: Array.isArray(u.customLists) ? u.customLists : [],
+      followers: Array.isArray(u.followers) ? u.followers : [],
+      following: Array.isArray(u.following) ? u.following : [],
+      savedStories: Array.isArray(u.savedStories) ? u.savedStories : [],
+      bookmarks: Array.isArray(u.bookmarks) ? u.bookmarks : [],
+    };
+  };
+
+  // Users state
+  const [users, setUsers] = useState<User[]>(() => {
+    try {
+      const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}users`);
+      const parsed: User[] = saved ? JSON.parse(saved) : INITIAL_USERS;
+      return parsed.map(normalizeUser).filter((u) => !isBannedUser(u));
+    } catch {
+      return INITIAL_USERS.map(normalizeUser);
+    }
+  });
+
+  // Current logged in user
+  const [currentUserId, setCurrentUserId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}current_user_id`);
+      return saved !== null ? saved : '';
+    } catch {
+      return '';
+    }
+  });
+
+  const currentUser = currentUserId ? (users.find((u) => u.id === currentUserId) || null) : null;
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${LOCAL_STORAGE_PREFIX}users`, JSON.stringify(users.filter((u) => !isBannedUser(u))));
+    } catch (e) {
+      console.warn('localStorage setItem users error:', e);
+    }
+  }, [users]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${LOCAL_STORAGE_PREFIX}current_user_id`, currentUserId);
+      if (currentUser) {
+        addSavedDeviceAccount({
+          id: currentUser.id,
+          name: currentUser.name,
+          username: currentUser.username,
+          email: currentUser.email,
+          avatar: currentUser.avatar,
+          role: currentUser.role,
+        });
+      }
+    } catch (e) {
+      console.warn('localStorage setItem current_user_id error:', e);
+    }
+  }, [currentUserId, currentUser]);
+
+  // Initial Auth Session Check - Removed Firebase Auth
+  useEffect(() => {
+    // Firebase Auth is removed. 
+    // Auth state now handled locally via currentUserId.
+  }, []);
+
+  // Stories state (Stored in Firebase Firestore & Realtime DB - wattyboon-94c69)
+  const [stories, setStories] = useState<Story[]>(() => {
+    try {
+      const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}stories`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${LOCAL_STORAGE_PREFIX}stories`, JSON.stringify(stories));
+    } catch (e) {
+      console.warn('localStorage setItem stories error:', e);
+    }
+  }, [stories]);
+
+  // Firebase Realtime & Polling Listener for Stories (+999 Unlimited Stories)
+  useEffect(() => {
+    let isMounted = true;
+    const loadFromFirebase = async () => {
+      try {
+        const fbStories = await fetchStoriesFromFirebase();
+        if (isMounted && Array.isArray(fbStories) && fbStories.length > 0) {
+          setStories(fbStories);
+        }
+      } catch (err) {
+        console.warn('[Firebase Stories Sync] Load notice:', err);
+      }
+    };
+
+    loadFromFirebase();
+    const interval = setInterval(loadFromFirebase, 8000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Notifications state
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    try {
+      const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}notifications`);
+      return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
+    } catch {
+      return INITIAL_NOTIFICATIONS;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${LOCAL_STORAGE_PREFIX}notifications`, JSON.stringify(notifications));
+    } catch (e) {
+      console.warn('localStorage setItem notifications error:', e);
+    }
+  }, [notifications]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadNotifs = async () => {
+      try {
+        const fbNotifs = await fetchNotificationsFromFirebase();
+        if (isMounted && Array.isArray(fbNotifs) && fbNotifs.length > 0) {
+          setNotifications(fbNotifs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        }
+      } catch (err) {
+        console.warn('[Firebase Notifications] Sync notice:', err);
+      }
+    };
+    loadNotifs();
+    const interval = setInterval(loadNotifs, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Messages state
+  const [messages, setMessages] = useState<DirectMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}messages`);
+      return saved ? JSON.parse(saved) : INITIAL_MESSAGES;
+    } catch {
+      return INITIAL_MESSAGES;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${LOCAL_STORAGE_PREFIX}messages`, JSON.stringify(messages));
+    } catch (e) {
+      console.warn('localStorage setItem messages error:', e);
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadMessages = async () => {
+      try {
+        const fbMsgs = await fetchMessagesFromFirebase();
+        if (isMounted && Array.isArray(fbMsgs) && fbMsgs.length > 0) {
+          setMessages(fbMsgs);
+        }
+      } catch (err) {
+        console.warn('[Firebase Messages] Sync notice:', err);
+      }
+    };
+    loadMessages();
+    const interval = setInterval(loadMessages, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Reports state (Şikayetler & Moderasyon Raporları)
+  const [reports, setReports] = useState<StoryReport[]>(() => {
+    try {
+      const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}reports`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${LOCAL_STORAGE_PREFIX}reports`, JSON.stringify(reports));
+    } catch (e) {
+      console.warn('localStorage setItem reports error:', e);
+    }
+  }, [reports]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadReports = async () => {
+      try {
+        const fbReports = await fetchReportsFromFirebase();
+        if (isMounted && Array.isArray(fbReports)) {
+          setReports(fbReports);
+        }
+      } catch (err) {
+        console.warn('[Firebase Reports] Sync notice:', err);
+      }
+    };
+    loadReports();
+    const interval = setInterval(loadReports, 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Forum Topics State (Firebase Storage - wattyboon-94c69)
+  const [forumTopics, setForumTopics] = useState<ForumTopic[]>(() => {
+    try {
+      const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}forum_topics`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.filter((t: ForumTopic) => !['ft_1', 'ft_2', 'ft_3'].includes(t.id));
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${LOCAL_STORAGE_PREFIX}forum_topics`, JSON.stringify(forumTopics));
+    } catch (e) {
+      console.warn('localStorage setItem forum_topics error:', e);
+    }
+  }, [forumTopics]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadTopicsFromFirebase = async () => {
+      try {
+        const fbTopics = await fetchForumTopicsFromFirebase();
+        if (isMounted && Array.isArray(fbTopics)) {
+          setForumTopics(fbTopics.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        }
+      } catch (err) {
+        console.warn('[Firebase Topics Sync] Load notice:', err);
+      }
+    };
+
+    loadTopicsFromFirebase();
+    const interval = setInterval(loadTopicsFromFirebase, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Archived Stories State (Kayıp & Silinen Eserler Arşivi)
+  const [archivedStories, setArchivedStories] = useState<ArchivedStory[]>(() => {
+    try {
+      const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}archived_stories`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(item => item.id !== 'arch_1' && item.id !== 'arch_2' && item.id !== 'arch_3');
+        }
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${LOCAL_STORAGE_PREFIX}archived_stories`, JSON.stringify(archivedStories));
+    } catch (e) {
+      console.warn('localStorage setItem archived_stories error:', e);
+    }
+  }, [archivedStories]);
+
+  // Paragraph Comments state (Firebase Storage)
+  const [paragraphComments, setParagraphComments] = useState<ParagraphComment[]>(() => {
+    const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}paragraph_comments`);
+    if (saved) return JSON.parse(saved);
+    return [];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${LOCAL_STORAGE_PREFIX}paragraph_comments`, JSON.stringify(paragraphComments));
+    } catch (e) {
+      console.warn('localStorage setItem paragraph_comments error:', e);
+    }
+  }, [paragraphComments]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadPComments = async () => {
+      try {
+        const fbPComments = await fetchParagraphCommentsFromFirebase();
+        if (isMounted && Array.isArray(fbPComments)) {
+          setParagraphComments(fbPComments);
+        }
+      } catch (err) {
+        console.warn('[Firebase Paragraph Comments Sync] Load notice:', err);
+      }
+    };
+
+    loadPComments();
+    const interval = setInterval(loadPComments, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Messaging UI State
+  const [isMessagingOpen, setIsMessagingOpen] = useState<boolean>(false);
+  const [activeMessagingUserId, setActiveMessagingUserId] = useState<string | null>(null);
+
+  const openMessagingWithUser = (userId: string | null = null) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setActiveMessagingUserId(userId);
+    setIsMessagingOpen(true);
+  };
+
+  const closeMessaging = () => {
+    setIsMessagingOpen(false);
+  };
+
+  const sendNotification = (notifData: Partial<AppNotification>) => {
+    const newNotif: AppNotification = {
+      id: 'notif_' + Date.now(),
+      userId: notifData.userId || '',
+      actorId: notifData.actorId || currentUser?.id,
+      senderId: notifData.senderId || currentUser?.id,
+      senderName: notifData.senderName || currentUser?.name,
+      senderAvatar: notifData.senderAvatar || currentUser?.avatar,
+      type: notifData.type || 'system',
+      title: notifData.title || 'Bildirim',
+      message: notifData.message || '',
+      storyId: notifData.storyId,
+      chapterIndex: notifData.chapterIndex,
+      targetUserId: notifData.targetUserId,
+      createdAt: new Date().toISOString(),
+      isRead: false,
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+    saveNotificationToFirebase(newNotif);
+  };
+
+  const sendDirectMessage = (receiverId: string, content: string) => {
+    if (!currentUser || !content.trim()) return;
+    const newMsg: DirectMessage = {
+      id: 'msg_' + Date.now(),
+      senderId: currentUser.id,
+      receiverId,
+      content: content.trim(),
+      createdAt: new Date().toISOString(),
+      isRead: false,
+    };
+    setMessages((prev) => [...prev, newMsg]);
+    saveMessageToFirebase(newMsg);
+
+    sendNotification({
+      userId: receiverId,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      type: 'system',
+      title: 'Yeni Mesaj',
+      message: `${currentUser.name} sana bir mesaj gönderdi.`,
+    });
+
+    // Email Notification to receiver if they have an email address
+    const recipientUser = users.find((u) => u.id === receiverId);
+    if (recipientUser?.email) {
+      sendMessageEmailNotification({
+        recipientEmail: recipientUser.email,
+        recipientName: recipientUser.name,
+        senderName: currentUser.name,
+        senderUsername: currentUser.username || currentUser.name.toLowerCase().replace(/\s+/g, ''),
+        messageContent: content.trim(),
+        createdAt: new Date().toISOString(),
+      }).catch((err) => console.warn('DM Email notify error:', err));
+    }
+  };
+
+  const markMessagesAsRead = (senderId: string) => {
+    if (!currentUser) return;
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.senderId === senderId && m.receiverId === currentUser.id) {
+          const updated = { ...m, isRead: true };
+          saveMessageToFirebase(updated);
+          return updated;
+        }
+        return m;
+      })
+    );
+  };
+
+  const unreadMessageCount = currentUser
+    ? messages.filter((m) => m.receiverId === currentUser.id && !m.isRead).length
+    : 0;
+
+  // Reading Progress Action
+  const updateReadingProgress = (storyId: string, chapterIndex: number) => {
+    if (!currentUser) return;
+    const now = new Date().toISOString();
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id !== currentUser.id) return u;
+        const currentProgress = Array.isArray(u.readingProgress) ? u.readingProgress : [];
+        const existingIdx = currentProgress.findIndex((p) => p.storyId === storyId);
+        let updatedProgress: ReadingProgress[];
+        if (existingIdx >= 0) {
+          updatedProgress = currentProgress.map((p, idx) =>
+            idx === existingIdx ? { storyId, lastChapterIndex: chapterIndex, updatedAt: now } : p
+          );
+        } else {
+          updatedProgress = [{ storyId, lastChapterIndex: chapterIndex, updatedAt: now }, ...currentProgress];
+        }
+        const updatedUser = { ...u, readingProgress: updatedProgress };
+        saveUserToFirebase(updatedUser);
+        return updatedUser;
+      })
+    );
+  };
+
+  // Custom Lists Actions
+  const createCustomList = (name: string, description?: string): string => {
+    if (!currentUser || !name.trim()) return '';
+    const newId = 'clist_' + Date.now();
+    const newList: CustomList = {
+      id: newId,
+      name: name.trim(),
+      description: description?.trim(),
+      storyIds: [],
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id !== currentUser.id) return u;
+        const currentLists = u.customLists || [];
+        const updatedUser = { ...u, customLists: [...currentLists, newList] };
+        saveUserToFirebase(updatedUser);
+        return updatedUser;
+      })
+    );
+    return newId;
+  };
+
+  const addStoryToCustomList = (listId: string, storyId: string) => {
+    if (!currentUser) return;
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id !== currentUser.id) return u;
+        const updatedLists = (u.customLists || []).map((list) => {
+          if (list.id !== listId) return list;
+          if (list.storyIds.includes(storyId)) return list;
+          return { ...list, storyIds: [...list.storyIds, storyId] };
+        });
+        const updatedUser = { ...u, customLists: updatedLists };
+        saveUserToFirebase(updatedUser);
+        return updatedUser;
+      })
+    );
+  };
+
+  const removeStoryFromCustomList = (listId: string, storyId: string) => {
+    if (!currentUser) return;
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id !== currentUser.id) return u;
+        const updatedLists = (u.customLists || []).map((list) => {
+          if (list.id !== listId) return list;
+          return { ...list, storyIds: list.storyIds.filter((id) => id !== storyId) };
+        });
+        const updatedUser = { ...u, customLists: updatedLists };
+        saveUserToFirebase(updatedUser);
+        return updatedUser;
+      })
+    );
+  };
+
+  const deleteCustomList = (listId: string) => {
+    if (!currentUser) return;
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id !== currentUser.id) return u;
+        const updatedUser = {
+          ...u,
+          customLists: (u.customLists || []).filter((list) => list.id !== listId),
+        };
+        saveUserToFirebase(updatedUser);
+        return updatedUser;
+      })
+    );
+  };
+
+  // Helper to parse route from initial URL (supporting clean paths like /sitemap, /kesfet and legacy query params)
+  const getInitialRouteFromUrl = (): {
+    view: ViewType;
+    storyId: string | null;
+    chapterIndex: number;
+    authorId: string | null;
+    editStoryId: string | null;
+    category: Category | 'Tümü';
+    tag?: string;
+  } => {
+    try {
+      const pathname = (typeof window !== 'undefined' ? window.location.pathname : '/').replace(/\/+$/, '') || '/';
+      const pathSegments = pathname.split('/').filter(Boolean);
+      const firstSegment = pathSegments[0]?.toLowerCase();
+      const secondSegment = pathSegments[1];
+      const thirdSegment = pathSegments[2];
+
+      const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+      const sayfa = params.get('sayfa')?.toLowerCase();
+      const queryId = params.get('id');
+      const bolumStr = params.get('bolum');
+      const queryBolum = bolumStr ? Math.max(0, parseInt(bolumStr, 10) - 1) : 0;
+      const kategoriParam = params.get('kategori');
+      const etiketParam = params.get('etiket') || undefined;
+
+      let view: ViewType = 'home';
+      let storyId: string | null = queryId || null;
+      let chapterIndex = queryBolum;
+      let authorId: string | null = queryId || null;
+      let editStoryId: string | null = null;
+      let category: Category | 'Tümü' = (kategoriParam as Category) || 'Tümü';
+      let tag: string | undefined = etiketParam;
+
+      // Clean path route resolution:
+      if (firstSegment === 'sitemap' || firstSegment === 'site-haritasi' || firstSegment === 'harita') {
+        view = 'sitemap';
+      } else if (firstSegment === 'kesfet' || firstSegment === 'explore' || firstSegment === 'arama' || firstSegment === 'ara') {
+        view = 'explore';
+      } else if (firstSegment === 'kategoriler') {
+        view = 'categories';
+      } else if (firstSegment === 'kategori') {
+        if (secondSegment) {
+          view = 'explore';
+          category = decodeURIComponent(secondSegment) as Category;
+        } else {
+          view = 'categories';
+        }
+      } else if (firstSegment === 'kutuphanem' || firstSegment === 'kutuphane' || firstSegment === 'library') {
+        view = 'library';
+      } else if (firstSegment === 'forum' || firstSegment === 'tartisma') {
+        view = 'forum';
+      } else if (firstSegment === 'yaz' || firstSegment === 'editor') {
+        view = 'editor';
+        editStoryId = secondSegment ? decodeURIComponent(secondSegment) : queryId || null;
+      } else if (firstSegment === 'hikaye' || firstSegment === 'story') {
+        view = 'story-detail';
+        if (secondSegment) storyId = decodeURIComponent(secondSegment);
+      } else if (firstSegment === 'oku' || firstSegment === 'reader') {
+        view = 'reader';
+        if (secondSegment) storyId = decodeURIComponent(secondSegment);
+        if (thirdSegment) chapterIndex = Math.max(0, parseInt(thirdSegment, 10) - 1);
+      } else if (firstSegment === 'profil' || firstSegment === 'profile' || firstSegment === 'yazar') {
+        view = 'profile';
+        if (secondSegment) authorId = decodeURIComponent(secondSegment);
+      } else if (firstSegment === 'bildirimler' || firstSegment === 'notifications') {
+        view = 'notifications';
+      }
+      // Legacy query param resolution fallback (?sayfa=...):
+      else if (sayfa) {
+        if (sayfa === 'anasayfa' || sayfa === 'home') view = 'home';
+        else if (sayfa === 'kesfet' || sayfa === 'explore' || sayfa === 'arama' || sayfa === 'ara') view = 'explore';
+        else if (sayfa === 'kategoriler' || sayfa === 'kategori') view = 'categories';
+        else if (sayfa === 'kutuphanem' || sayfa === 'kutuphane' || sayfa === 'library') view = 'library';
+        else if (sayfa === 'forum' || sayfa === 'tartisma') view = 'forum';
+        else if (sayfa === 'yaz' || sayfa === 'editor') {
+          view = 'editor';
+          editStoryId = queryId || null;
+        }
+        else if (sayfa === 'hikaye' || sayfa === 'hikaye-detay' || sayfa === 'story') view = 'story-detail';
+        else if (sayfa === 'oku' || sayfa === 'reader') view = 'reader';
+        else if (sayfa === 'profil' || sayfa === 'profile') view = 'profile';
+        else if (sayfa === 'bildirimler' || sayfa === 'notifications') view = 'notifications';
+        else if (sayfa === 'sitemap' || sayfa === 'site-haritasi' || sayfa === 'harita') view = 'sitemap';
+      } else if (kategoriParam) {
+        view = 'explore';
+      }
+
+      return {
+        view,
+        storyId,
+        chapterIndex,
+        authorId,
+        editStoryId,
+        category,
+        tag,
+      };
+    } catch {
+      return {
+        view: 'home',
+        storyId: null,
+        chapterIndex: 0,
+        authorId: null,
+        editStoryId: null,
+        category: 'Tümü',
+        tag: undefined,
+      };
+    }
+  };
+
+  const initialRoute = getInitialRouteFromUrl();
+
+  // View & Navigation State
+  const [activeView, setActiveViewRaw] = useState<ViewType>(initialRoute.view);
+  const [activeStoryId, setActiveStoryId] = useState<string | null>(initialRoute.storyId);
+  const [activeChapterIndex, setActiveChapterIndex] = useState<number>(initialRoute.chapterIndex);
+  const [activeAuthorId, setActiveAuthorId] = useState<string | null>(initialRoute.authorId);
+  const [editingStoryId, setEditingStoryId] = useState<string | null>(initialRoute.editStoryId);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [autoOpenProfileSettings, setAutoOpenProfileSettings] = useState<boolean>(false);
+
+  // Helper to generate dynamic clean URL paths and page document title
+  const getUrlAndTitle = (
+    view: ViewType,
+    storyId: string | null = activeStoryId,
+    chapterIndex: number = activeChapterIndex,
+    authorId: string | null = activeAuthorId,
+    editStoryId: string | null = editingStoryId,
+    catFilter: Category | 'Tümü' = selectedCategoryFilter,
+    tagFilter: string | undefined = selectedTagFilter
+  ): { url: string; title: string } => {
+    let url = '/';
+    let title = 'WattyBoon';
+
+    switch (view) {
+      case 'home': {
+        url = '/';
+        title = 'WattyBoon | Ana Sayfa - Edebiyat ve Hikaye Dünyası';
+        break;
+      }
+      case 'explore': {
+        const params = new URLSearchParams();
+        if (catFilter && catFilter !== 'Tümü') params.set('kategori', catFilter);
+        if (tagFilter) params.set('etiket', tagFilter);
+        const queryStr = params.toString();
+        url = queryStr ? `/kesfet?${queryStr}` : '/kesfet';
+        if (catFilter && catFilter !== 'Tümü') {
+          title = `WattyBoon | ${catFilter} Hikayeleri`;
+        } else if (tagFilter) {
+          title = `WattyBoon | #${tagFilter} Eserleri`;
+        } else {
+          title = 'WattyBoon | Keşfet';
+        }
+        break;
+      }
+      case 'categories': {
+        const params = new URLSearchParams();
+        if (catFilter && catFilter !== 'Tümü') params.set('kategori', catFilter);
+        const queryStr = params.toString();
+        url = queryStr ? `/kategoriler?${queryStr}` : '/kategoriler';
+        title = catFilter && catFilter !== 'Tümü' ? `WattyBoon | ${catFilter} Kategorisi` : 'WattyBoon | Tüm Kategoriler';
+        break;
+      }
+      case 'library': {
+        url = '/kutuphanem';
+        title = 'WattyBoon | Kütüphanem';
+        break;
+      }
+      case 'forum': {
+        url = '/forum';
+        title = 'WattyBoon | Topluluk ve Forum';
+        break;
+      }
+      case 'editor': {
+        if (editStoryId) {
+          url = `/yaz?id=${encodeURIComponent(editStoryId)}`;
+          const targetStory = stories.find((s) => s.id === editStoryId);
+          title = targetStory ? `WattyBoon | Düzenle: ${targetStory.title}` : 'WattyBoon | Hikaye Düzenle';
+        } else {
+          url = '/yaz';
+          title = 'WattyBoon | Yeni Hikaye Yaz';
+        }
+        break;
+      }
+      case 'story-detail': {
+        url = storyId ? `/hikaye/${encodeURIComponent(storyId)}` : '/hikaye';
+        const targetStory = stories.find((s) => s.id === storyId);
+        title = targetStory ? `WattyBoon | ${targetStory.title}` : 'WattyBoon | Hikaye Detayı';
+        break;
+      }
+      case 'reader': {
+        url = storyId ? `/oku/${encodeURIComponent(storyId)}/${chapterIndex + 1}` : '/oku';
+        const targetStory = stories.find((s) => s.id === storyId);
+        const chapter = targetStory?.chapters?.[chapterIndex];
+        const chapTitle = chapter ? (chapter.title || `Bölüm ${chapterIndex + 1}`) : `Bölüm ${chapterIndex + 1}`;
+        title = targetStory ? `WattyBoon | ${targetStory.title} - ${chapTitle}` : 'WattyBoon | Hikaye Oku';
+        break;
+      }
+      case 'profile': {
+        const targetId = authorId || currentUser?.id;
+        url = targetId ? `/profil/${encodeURIComponent(targetId)}` : '/profil';
+        const targetUser = users.find((u) => u.id === targetId);
+        title = targetUser ? `WattyBoon | ${targetUser.name} (@${targetUser.username})` : 'WattyBoon | Yazar Profili';
+        break;
+      }
+      case 'notifications': {
+        url = '/bildirimler';
+        title = 'WattyBoon | Bildirimler';
+        break;
+      }
+      case 'sitemap': {
+        url = '/sitemap';
+        title = 'WattyBoon | Site Haritası & İndeks';
+        break;
+      }
+      default: {
+        url = '/';
+        title = 'WattyBoon | Hikaye Dünyası';
+      }
+    }
+
+    return { url, title };
+  };
+
+  const pushStateToHistory = (
+    view: ViewType,
+    storyId: string | null = activeStoryId,
+    chapterIndex: number = activeChapterIndex,
+    authorId: string | null = activeAuthorId,
+    editStoryId: string | null = editingStoryId
+  ) => {
+    try {
+      const { url, title } = getUrlAndTitle(view, storyId, chapterIndex, authorId, editStoryId);
+      document.title = title;
+      window.history.pushState(
+        {
+          activeView: view,
+          activeStoryId: storyId,
+          activeChapterIndex: chapterIndex,
+          activeAuthorId: authorId,
+          editingStoryId: editStoryId,
+        },
+        title,
+        url
+      );
+    } catch (e) {
+      console.warn('History pushState error:', e);
+    }
+  };
+
+  const setActiveView = (view: ViewType) => {
+    setActiveViewRaw(view);
+    pushStateToHistory(view);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    try {
+      const { url, title } = getUrlAndTitle(
+        activeView,
+        activeStoryId,
+        activeChapterIndex,
+        activeAuthorId,
+        editingStoryId,
+        selectedCategoryFilter,
+        selectedTagFilter
+      );
+      document.title = title;
+      window.history.replaceState(
+        {
+          activeView,
+          activeStoryId,
+          activeChapterIndex,
+          activeAuthorId,
+          editingStoryId,
+          selectedCategoryFilter,
+          selectedTagFilter,
+        },
+        title,
+        url
+      );
+    } catch (e) {
+      console.warn('History replaceState error:', e);
+    }
+  }, [
+    activeView,
+    activeStoryId,
+    activeChapterIndex,
+    activeAuthorId,
+    editingStoryId,
+    selectedCategoryFilter,
+    selectedTagFilter,
+    stories,
+    users,
+    currentUser,
+  ]);
+
+  // Browser back/forward navigation listener (popstate)
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      if (e.state && e.state.activeView) {
+        setActiveViewRaw(e.state.activeView);
+        if (e.state.activeStoryId !== undefined) setActiveStoryId(e.state.activeStoryId);
+        if (e.state.activeChapterIndex !== undefined) setActiveChapterIndex(e.state.activeChapterIndex);
+        if (e.state.activeAuthorId !== undefined) setActiveAuthorId(e.state.activeAuthorId);
+        if (e.state.editingStoryId !== undefined) setEditingStoryId(e.state.editingStoryId);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Cascading User Deletion
+  const deleteUserDataCascade = async (userId: string) => {
+    if (!userId) return;
+
+    setStories((prev) => {
+      const remaining = prev.filter((s) => s.authorId !== userId);
+      const deleted = prev.filter((s) => s.authorId === userId);
+      deleted.forEach((s) => {
+        deleteStoryFromFirebase(s.id).catch((err) => console.warn('Delete story error:', err));
+      });
+      return remaining;
+    });
+
+    setMessages((prev) => prev.filter((m) => m.senderId !== userId && m.receiverId !== userId));
+    setNotifications((prev) => prev.filter((n) => n.userId !== userId && n.actorId !== userId));
+    setParagraphComments((prev) => prev.filter((pc) => pc.userId !== userId));
+
+    setForumTopics((prev) => {
+      const remaining = prev.filter((ft) => ft.authorId !== userId);
+      const deleted = prev.filter((ft) => ft.authorId === userId);
+      deleted.forEach((ft) => {
+        deleteForumTopicFromFirebase(ft.id).catch((err) => console.warn('Delete forumTopic error:', err));
+      });
+      return remaining.map((t) => ({
+        ...t,
+        replies: (t.replies || []).filter((r) => r.userId !== userId),
+      }));
+    });
+
+    setUsers((prevUsers) => {
+      const remainingUsers = prevUsers.filter((u) => u.id !== userId);
+      return remainingUsers.map((u) => {
+        let changed = false;
+        let updatedFollowers = u.followers || [];
+        let updatedFollowing = u.following || [];
+
+        if (updatedFollowers.includes(userId)) {
+          updatedFollowers = updatedFollowers.filter((id) => id !== userId);
+          changed = true;
+        }
+        if (updatedFollowing.includes(userId)) {
+          updatedFollowing = updatedFollowing.filter((id) => id !== userId);
+          changed = true;
+        }
+
+        if (changed) {
+          const updatedUser: User = {
+            ...u,
+            followers: updatedFollowers,
+            following: updatedFollowing,
+          };
+          saveUserToFirebase(updatedUser);
+          return updatedUser;
+        }
+        return u;
+      });
+    });
+
+    await deleteUserFromFirebase(userId);
+  };
+
+  // ==========================================
+  // AUTHENTICATION METHODS (FIREBASE ENGINE - wattyboon-94c69)
+  // ==========================================
+
+  const loginWithGoogle = async (customEmail?: string, customName?: string): Promise<{ success: boolean; error?: string; domainError?: boolean }> => {
+    try {
+      const targetEmail = customEmail || 'semajim30@gmail.com';
+      const targetName = customName || 'Sema';
+
+      const res = await firebaseGoogleLoginUser(targetEmail, targetName);
+      if (res.success && res.user) {
+        const u = res.user;
+        setUsers((prev) => [...prev.filter((item) => item.id !== u.id), u]);
+        setCurrentUserId(u.id);
+        setActiveAuthorId(u.id);
+        setActiveViewRaw('profile');
+        pushStateToHistory('profile', activeStoryId, activeChapterIndex, u.id);
+        setAutoOpenProfileSettings(true);
+        return { success: true };
+      }
+      return { success: false, error: res.error || 'Google ile giriş yapılamadı.' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Google girişi sırasında bir hata oluştu.' };
+    }
+  };
+
+  const login = async (emailOrUsername: string, password?: string): Promise<{ success: boolean; error?: string }> => {
+    const inputClean = emailOrUsername.trim();
+    if (!inputClean) return { success: false, error: 'Lütfen e-posta adresinizi veya kullanıcı adınızı giriniz.' };
+
+    const res = await firebaseLoginUser(inputClean, password);
+    if (res.success && res.user) {
+      const u = res.user;
+      setUsers((prev) => [...prev.filter((existing) => existing.id !== u.id), u]);
+      setCurrentUserId(u.id);
+      setActiveAuthorId(u.id);
+      return { success: true };
+    }
+    return { success: false, error: res.error || 'Giriş yapılamadı. Bilgilerinizi kontrol ediniz.' };
+  };
+
+  const register = async (name: string, username: string, email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim().toLowerCase();
+    const cleanUsername = username.trim().replace(/^@/, '');
+
+    if (!trimmedName || !cleanUsername || !trimmedEmail) {
+      return { success: false, error: 'Lütfen tüm zorunlu alanları doldurunuz.' };
+    }
+
+    const res = await firebaseRegisterUser(trimmedName, cleanUsername, trimmedEmail, password);
+    if (res.success && res.user) {
+      const u = res.user;
+      setUsers((prev) => [...prev.filter((existing) => existing.id !== u.id), u]);
+      setCurrentUserId(u.id);
+      setActiveAuthorId(u.id);
+      setActiveViewRaw('profile');
+      pushStateToHistory('profile', activeStoryId, activeChapterIndex, u.id);
+      setAutoOpenProfileSettings(true);
+      return { success: true };
+    }
+    return { success: false, error: res.error || 'Kayıt oluşturulamadı.' };
+  };
+
+  const sendPasswordReset = async (email: string): Promise<{ success: boolean; message?: string; error?: string }> => {
+    if (!email || !email.includes('@')) {
+      return { success: false, error: 'Lütfen geçerli bir e-posta adresi giriniz.' };
+    }
+    const res = await firebasePasswordReset(email.trim().toLowerCase());
+    return res;
+  };
+
+  const changePassword = async (newPassword: string): Promise<{ success: boolean; message?: string; error?: string }> => {
+    if (!newPassword || newPassword.length < 6) {
+      return { success: false, error: 'Yeni şifre en az 6 karakter olmalıdır.' };
+    }
+    if (!currentUser?.email) {
+      return { success: false, error: 'Oturum açmış kullanıcı bulunamadı.' };
+    }
+    const res = await firebasePasswordReset(currentUser.email);
+    return res;
+  };
+
+  const deleteAccount = async (): Promise<{ success: boolean; message?: string; error?: string }> => {
+    if (!currentUser) {
+      return { success: false, error: 'Oturum açmış kullanıcı bulunamadı.' };
+    }
+    const userIdToDelete = currentUser.id;
+    removeSavedDeviceAccount(userIdToDelete);
+    await deleteUserDataCascade(userIdToDelete);
+    await firebaseLogoutUser();
+    setCurrentUserId('');
+    setIsAuthModalOpen(false);
+    setActiveView('explore');
+    return { success: true, message: 'Hesabınız ve tüm verileriniz kalıcı olarak silindi.' };
+  };
+
+  const logout = () => {
+    if (currentUser) {
+      addSavedDeviceAccount({
+        id: currentUser.id,
+        name: currentUser.name,
+        username: currentUser.username,
+        email: currentUser.email,
+        avatar: currentUser.avatar,
+        role: currentUser.role,
+      });
+    }
+    firebaseLogoutUser();
+    setCurrentUserId('');
+    setIsAuthModalOpen(false);
+  };
+
+  const switchDemoUser = (userId: string) => {
+    if (users.some((u) => u.id === userId)) {
+      setCurrentUserId(userId);
+    }
+  };
+
+  const updateProfile = async (
+    bioOrData: string | ProfileUpdateData,
+    name?: string,
+    avatar?: string,
+    coverUrl?: string,
+    username?: string,
+    email?: string
+  ): Promise<{ success: boolean; error?: string; message?: string }> => {
+    if (!currentUser) {
+      return { success: false, error: 'Oturum açmış kullanıcı bulunamadı.' };
+    }
+
+    let finalName = currentUser.name;
+    let finalUsername = currentUser.username;
+    let finalEmail = currentUser.email;
+    let finalBio = currentUser.bio;
+    let finalAvatar = currentUser.avatar;
+    let finalCoverUrl = currentUser.coverUrl;
+
+    if (typeof bioOrData === 'object' && bioOrData !== null) {
+      if (bioOrData.name !== undefined) finalName = bioOrData.name.trim();
+      if (bioOrData.username !== undefined) finalUsername = bioOrData.username.trim().replace(/^@/, '');
+      if (bioOrData.email !== undefined) finalEmail = bioOrData.email.trim().toLowerCase();
+      if (bioOrData.bio !== undefined) finalBio = bioOrData.bio;
+      if (bioOrData.avatar !== undefined) finalAvatar = bioOrData.avatar;
+      if (bioOrData.coverUrl !== undefined) finalCoverUrl = bioOrData.coverUrl;
+    } else {
+      if (typeof bioOrData === 'string') finalBio = bioOrData;
+      if (name !== undefined) finalName = name.trim();
+      if (avatar !== undefined && avatar.trim()) finalAvatar = avatar.trim();
+      if (coverUrl !== undefined) finalCoverUrl = coverUrl;
+      if (username !== undefined) finalUsername = username.trim().replace(/^@/, '');
+      if (email !== undefined) finalEmail = email.trim().toLowerCase();
+    }
+
+    if (!finalName) {
+      return { success: false, error: 'Ad Soyad alanı boş bırakılamaz.' };
+    }
+
+    if (!finalUsername || finalUsername.length < 3) {
+      return { success: false, error: 'Kullanıcı adı en az 3 karakter olmalıdır.' };
+    }
+
+    // Clean username characters
+    finalUsername = finalUsername.replace(/[^a-zA-Z0-9_.]/g, '');
+
+    // Check username uniqueness among other users
+    const usernameTaken = users.some(
+      (u) => u.id !== currentUser.id && u.username?.toLowerCase() === finalUsername.toLowerCase()
+    );
+    if (usernameTaken) {
+      return { success: false, error: `@${finalUsername} kullanıcı adı başka bir üye tarafından kullanılıyor.` };
+    }
+
+    // Check email format & uniqueness
+    if (finalEmail) {
+      if (!finalEmail.includes('@') || !finalEmail.includes('.')) {
+        return { success: false, error: 'Lütfen geçerli bir e-posta adresi giriniz.' };
+      }
+      const emailTaken = users.some(
+        (u) => u.id !== currentUser.id && u.email?.toLowerCase() === finalEmail.toLowerCase()
+      );
+      if (emailTaken) {
+        return { success: false, error: `${finalEmail} e-posta adresi başka bir hesaba kayıtlı.` };
+      }
+    }
+
+    const updatedUser: User = {
+      ...currentUser,
+      name: finalName,
+      username: finalUsername,
+      email: finalEmail || currentUser.email,
+      bio: finalBio,
+      avatar: finalAvatar || currentUser.avatar,
+      coverUrl: finalCoverUrl !== undefined ? finalCoverUrl : currentUser.coverUrl,
+    };
+
+    // Update users state
+    setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? updatedUser : u)));
+
+    // Propagate author updates to stories
+    setStories((prev) =>
+      prev.map((s) => {
+        if (s.authorId === currentUser.id) {
+          const updated = {
+            ...s,
+            authorName: finalName,
+            authorUsername: finalUsername,
+            authorAvatar: finalAvatar || s.authorAvatar,
+          };
+          saveStoryToFirebase(updated).catch(() => {});
+          return updated;
+        }
+        return s;
+      })
+    );
+
+    // Propagate author updates to forum topics
+    setForumTopics((prev) =>
+      prev.map((t) => {
+        if (t.authorId === currentUser.id) {
+          const updated = {
+            ...t,
+            authorName: finalName,
+            authorUsername: finalUsername,
+            authorAvatar: finalAvatar || t.authorAvatar,
+          };
+          saveForumTopicToFirebase(updated).catch(() => {});
+          return updated;
+        }
+        return t;
+      })
+    );
+
+    // Save to Firebase storage
+    await saveUserToFirebase(updatedUser);
+
+    return {
+      success: true,
+      message: 'Profil ve hesap bilgileriniz başarıyla güncellendi.',
+    };
+  };
+
+  // ==========================================
+  // PARAGRAPH COMMENTS
+  // ==========================================
+
+  const addParagraphComment = (storyId: string, chapterIndex: number, paragraphIndex: number, content: string, selectedText?: string) => {
+    if (!currentUser || !content.trim()) return;
+    const newComment: ParagraphComment = {
+      id: 'pcomm_' + Date.now(),
+      storyId,
+      chapterIndex,
+      paragraphIndex,
+      selectedText,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userUsername: currentUser.username,
+      userAvatar: currentUser.avatar,
+      content,
+      createdAt: new Date().toISOString(),
+      likes: 0,
+      likedBy: [],
+    };
+    setParagraphComments((prev) => [newComment, ...prev]);
+    saveParagraphCommentToFirebase(newComment);
+
+    // Send email notification to story author if not self
+    const targetStory = stories.find((s) => s.id === storyId);
+    if (targetStory && targetStory.authorId !== currentUser.id) {
+      const authorUser = users.find((u) => u.id === targetStory.authorId);
+      const chapter = targetStory.chapters?.[chapterIndex];
+      if (authorUser?.email) {
+        sendCommentEmailNotification({
+          recipientEmail: authorUser.email,
+          recipientName: authorUser.name,
+          storyId: targetStory.id,
+          storyTitle: targetStory.title,
+          chapterIndex,
+          chapterTitle: chapter?.title || `${chapterIndex + 1}. Bölüm`,
+          paragraphIndex,
+          selectedText,
+          content: content.trim(),
+          userName: currentUser.name,
+          userUsername: currentUser.username || currentUser.name.toLowerCase().replace(/\s+/g, ''),
+          createdAt: new Date().toISOString(),
+        }).catch((err) => console.warn('Paragraph comment email notify error:', err));
+      }
+    }
+  };
+
+  const toggleLikeParagraphComment = (commentId: string) => {
+    if (!currentUser) return;
+    setParagraphComments((prev) =>
+      prev.map((c) => {
+        if (c.id === commentId) {
+          const isLiked = c.likedBy.includes(currentUser.id);
+          const likedBy = isLiked
+            ? c.likedBy.filter((id) => id !== currentUser.id)
+            : [...c.likedBy, currentUser.id];
+          const updated = {
+            ...c,
+            likedBy,
+            likes: likedBy.length,
+          };
+          saveParagraphCommentToFirebase(updated);
+          return updated;
+        }
+        return c;
+      })
+    );
+  };
+
+  const deleteParagraphComment = (commentId: string) => {
+    if (!currentUser) return;
+    setParagraphComments((prev) => prev.filter((p) => p.id !== commentId));
+    deleteParagraphCommentFromFirebase(commentId);
+  };
+
+  // Navigation helpers
+  const openStoryDetail = (storyId: string) => {
+    setActiveStoryId(storyId);
+    setActiveViewRaw('story-detail');
+    pushStateToHistory('story-detail', storyId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openStoryReader = (storyId: string, chapterIndex: number = 0) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setActiveStoryId(storyId);
+    setActiveChapterIndex(chapterIndex);
+    setActiveViewRaw('reader');
+    pushStateToHistory('reader', storyId, chapterIndex);
+    incrementStoryReads(storyId, chapterIndex);
+    updateReadingProgress(storyId, chapterIndex);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openAuthorProfile = (authorId: string) => {
+    setActiveAuthorId(authorId);
+    setActiveViewRaw('profile');
+    pushStateToHistory('profile', activeStoryId, activeChapterIndex, authorId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openStoryEditor = (storyId: string | null = null) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setEditingStoryId(storyId);
+    setActiveViewRaw('editor');
+    pushStateToHistory('editor', storyId, activeChapterIndex, activeAuthorId, storyId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // ==========================================
+  // STORY ACTIONS (UNLIMITED PUBLISHING)
+  // ==========================================
+
+  const saveStory = (storyData: Partial<Story>): string => {
+    if (!currentUser) return '';
+
+    const now = new Date().toISOString().split('T')[0];
+    let targetId = storyData.id;
+
+    if (targetId && stories.some((s) => s.id === targetId)) {
+      // Update existing
+      const existingStory = stories.find((s) => s.id === targetId);
+      const prevChapterCount = existingStory?.chapters?.length || 0;
+      const newChapters = storyData.chapters || existingStory?.chapters || [];
+      const isNewChapterAdded = newChapters.length > prevChapterCount;
+      const newChapterIndex = newChapters.length - 1;
+      const newChapterTitle = newChapters[newChapterIndex]?.title || `${newChapters.length}. Bölüm`;
+
+      setStories((prev) =>
+        prev.map((s) => {
+          if (s.id === targetId) {
+            const updated = { ...s, ...storyData, updatedAt: now } as Story;
+            saveStoryToFirebase(updated);
+            return updated;
+          }
+          return s;
+        })
+      );
+
+      // Notify readers who have this story saved in their library
+      if (isNewChapterAdded && existingStory) {
+        const readersToNotify = users.filter(
+          (u) =>
+            u.id !== currentUser.id &&
+            (u.library?.some((item) => item.storyId === targetId) ||
+             u.customLists?.some((list) => list.storyIds?.includes(targetId)))
+        );
+
+        readersToNotify.forEach((reader) => {
+          sendNotification({
+            userId: reader.id,
+            actorId: currentUser.id,
+            senderId: currentUser.id,
+            senderName: currentUser.name,
+            senderAvatar: currentUser.avatar,
+            type: 'new_chapter',
+            title: '📖 Yeni Bölüm Yayınlandı!',
+            message: `Kütüphanendeki "${existingStory.title}" adlı esere yeni bir bölüm eklendi: "${newChapterTitle}". Hemen oku!`,
+            storyId: targetId,
+            targetStoryId: targetId,
+            chapterIndex: newChapterIndex,
+            targetChapterIndex: newChapterIndex,
+          });
+        });
+      }
+    } else {
+      // Create new story (UNLIMITED FOR ALL USERS)
+      targetId = 'story_' + Date.now();
+      const newStory: Story = {
+        id: targetId,
+        title: storyData.title || 'İsimsiz Hikaye',
+        summary: storyData.summary || '',
+        coverUrl:
+          storyData.coverUrl ||
+          'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=800',
+        authorId: currentUser.id,
+        authorName: currentUser.name,
+        authorUsername: currentUser.username,
+        authorAvatar: currentUser.avatar,
+        category: (storyData.category as Category) || 'Romantik',
+        tags: storyData.tags || ['Yeni'],
+        visibility: (storyData.visibility as Visibility) || 'public',
+        status: storyData.status || 'ongoing',
+        likes: 0,
+        likedBy: [],
+        reads: 0,
+        chapters: storyData.chapters || [],
+        comments: [],
+        createdAt: now,
+        updatedAt: now,
+        readingTimeMinutes: storyData.chapters
+          ? Math.ceil(
+              storyData.chapters.reduce((acc, c) => acc + c.content.length, 0) / 1000
+            ) || 3
+          : 3,
+      };
+
+      setStories((prev) => [newStory, ...prev]);
+      saveStoryToFirebase(newStory);
+
+      // Increment user's story count
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === currentUser.id
+            ? { ...u, storiesCount: (u.storiesCount || 0) + 1 }
+            : u
+        )
+      );
+    }
+
+    return targetId;
+  };
+
+  const deleteStory = (storyId: string) => {
+    if (!currentUser) return;
+    setStories((prev) => prev.filter((s) => s.id !== storyId));
+    deleteStoryFromFirebase(storyId);
+  };
+
+  const deleteChapter = (storyId: string, chapterIndex: number) => {
+    if (!currentUser) return;
+    setStories((prev) =>
+      prev.map((s) => {
+        if (s.id !== storyId) return s;
+        const updatedChapters = s.chapters.filter((_, idx) => idx !== chapterIndex);
+        const updated = {
+          ...s,
+          chapters: updatedChapters,
+          updatedAt: new Date().toISOString().split('T')[0],
+        };
+        saveStoryToFirebase(updated);
+        return updated;
+      })
+    );
+  };
+
+  const toggleLikeStory = (storyId: string) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setStories((prev) =>
+      prev.map((s) => {
+        if (s.id !== storyId) return s;
+        const isLiked = s.likedBy.includes(currentUser.id);
+        const newLikedBy = isLiked
+          ? s.likedBy.filter((id) => id !== currentUser.id)
+          : [...s.likedBy, currentUser.id];
+        const updated = {
+          ...s,
+          likedBy: newLikedBy,
+          likes: newLikedBy.length,
+        };
+        saveStoryToFirebase(updated);
+        return updated;
+      })
+    );
+  };
+
+  const toggleLikeChapter = (storyId: string, chapterIndex: number) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setStories((prev) =>
+      prev.map((s) => {
+        if (s.id !== storyId) return s;
+        const updatedChapters = s.chapters.map((chap, idx) => {
+          if (idx !== chapterIndex) return chap;
+          const likedBy = chap.likedBy || [];
+          const isLiked = likedBy.includes(currentUser.id);
+          const newLikedBy = isLiked
+            ? likedBy.filter((id) => id !== currentUser.id)
+            : [...likedBy, currentUser.id];
+          return {
+            ...chap,
+            likedBy: newLikedBy,
+            likes: newLikedBy.length,
+          };
+        });
+        const updated = { ...s, chapters: updatedChapters };
+        saveStoryToFirebase(updated);
+        return updated;
+      })
+    );
+  };
+
+  const addComment = (storyId: string, content: string) => {
+    if (!currentUser || !content.trim()) return;
+    const newComment: Comment = {
+      id: 'comm_' + Date.now(),
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userUsername: currentUser.username || currentUser.name.toLowerCase().replace(/\s+/g, ''),
+      userAvatar: currentUser.avatar,
+      content,
+      createdAt: new Date().toISOString().split('T')[0],
+      likes: 0,
+      likedBy: [],
+      replies: [],
+    };
+
+    setStories((prev) =>
+      prev.map((s) => {
+        if (s.id !== storyId) return s;
+        const updated = {
+          ...s,
+          comments: [newComment, ...(s.comments || [])],
+        };
+        saveStoryToFirebase(updated);
+        return updated;
+      })
+    );
+
+    // Send email notification to story author if not commenting on own story
+    const targetStory = stories.find((s) => s.id === storyId);
+    if (targetStory && targetStory.authorId !== currentUser.id) {
+      const authorUser = users.find((u) => u.id === targetStory.authorId);
+      if (authorUser?.email) {
+        sendCommentEmailNotification({
+          recipientEmail: authorUser.email,
+          recipientName: authorUser.name,
+          storyId: targetStory.id,
+          storyTitle: targetStory.title,
+          content: content.trim(),
+          userName: currentUser.name,
+          userUsername: currentUser.username || currentUser.name.toLowerCase().replace(/\s+/g, ''),
+          createdAt: new Date().toISOString(),
+        }).catch((err) => console.warn('Comment email notify error:', err));
+      }
+    }
+  };
+
+  const toggleLikeComment = (storyId: string, commentId: string) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setStories((prev) =>
+      prev.map((s) => {
+        if (s.id !== storyId) return s;
+        const updated = {
+          ...s,
+          comments: toggleLikeCommentInList(s.comments || [], commentId, currentUser.id),
+        };
+        saveStoryToFirebase(updated);
+        return updated;
+      })
+    );
+  };
+
+  const addReplyToComment = (storyId: string, parentCommentId: string, content: string) => {
+    if (!currentUser || !content.trim()) return;
+    const newReply: Comment = {
+      id: 'reply_' + Date.now(),
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userUsername: currentUser.username || currentUser.name.toLowerCase().replace(/\s+/g, ''),
+      userAvatar: currentUser.avatar,
+      content,
+      createdAt: new Date().toISOString().split('T')[0],
+      likes: 0,
+      likedBy: [],
+      replies: [],
+    };
+
+    setStories((prev) =>
+      prev.map((s) => {
+        if (s.id !== storyId) return s;
+        const updated = {
+          ...s,
+          comments: addReplyToCommentInList(s.comments || [], parentCommentId, newReply),
+        };
+        saveStoryToFirebase(updated);
+        return updated;
+      })
+    );
+
+    // Send email notification to parent comment owner or story author
+    const targetStory = stories.find((s) => s.id === storyId);
+    const findCommentInTree = (comms: Comment[]): Comment | undefined => {
+      for (const c of comms) {
+        if (c.id === parentCommentId) return c;
+        if (c.replies && c.replies.length > 0) {
+          const found = findCommentInTree(c.replies);
+          if (found) return found;
+        }
+      }
+      return undefined;
+    };
+    const parentComment = targetStory?.comments ? findCommentInTree(targetStory.comments) : undefined;
+    if (parentComment && parentComment.userId !== currentUser.id) {
+      const recipientUser = users.find((u) => u.id === parentComment.userId);
+      if (recipientUser?.email) {
+        sendCommentEmailNotification({
+          recipientEmail: recipientUser.email,
+          recipientName: recipientUser.name,
+          storyId: targetStory?.id,
+          storyTitle: targetStory?.title,
+          parentId: parentCommentId,
+          replyToUserName: parentComment.userName,
+          content: content.trim(),
+          userName: currentUser.name,
+          userUsername: currentUser.username || currentUser.name.toLowerCase().replace(/\s+/g, ''),
+          createdAt: new Date().toISOString(),
+        }).catch((err) => console.warn('Reply email notify error:', err));
+      }
+    }
+  };
+
+  const deleteComment = (storyId: string, commentId: string) => {
+    if (!currentUser) return;
+    setStories((prev) =>
+      prev.map((s) => {
+        if (s.id !== storyId) return s;
+        const updated = {
+          ...s,
+          comments: deleteCommentFromList(s.comments || [], commentId),
+        };
+        saveStoryToFirebase(updated);
+        return updated;
+      })
+    );
+  };
+
+  const incrementStoryReads = (storyId: string, chapterIndex: number) => {
+    setStories((prev) =>
+      prev.map((s) => {
+        if (s.id !== storyId) return s;
+        const updatedChapters = s.chapters.map((chap, idx) =>
+          idx === chapterIndex ? { ...chap, readCount: (chap.readCount || 0) + 1 } : chap
+        );
+        const updated = { ...s, reads: (s.reads || 0) + 1, chapters: updatedChapters };
+        saveStoryToFirebase(updated);
+        return updated;
+      })
+    );
+  };
+
+  // ==========================================
+  // FORUM & COMMUNITY
+  // ==========================================
+
+  const addForumTopic = (title: string, category: ForumTopic['category'], content: string, tags?: string[]): string => {
+    if (!currentUser || !title.trim() || !content.trim()) return '';
+    const newId = 'topic_' + Date.now();
+    const newTopic: ForumTopic = {
+      id: newId,
+      title: title.trim(),
+      category,
+      content: content.trim(),
+      tags: tags || [],
+      authorId: currentUser.id,
+      authorName: currentUser.name,
+      authorUsername: currentUser.username,
+      authorAvatar: currentUser.avatar,
+      createdAt: new Date().toISOString(),
+      likes: 0,
+      likedBy: [],
+      replies: [],
+      views: 1,
+    };
+    setForumTopics((prev) => [newTopic, ...prev]);
+    saveForumTopicToFirebase(newTopic);
+    return newId;
+  };
+
+  const deleteForumTopic = (topicId: string) => {
+    if (!currentUser) return;
+    setForumTopics((prev) => prev.filter((t) => t.id !== topicId));
+    deleteForumTopicFromFirebase(topicId);
+  };
+
+  const addForumReply = (topicId: string, content: string) => {
+    if (!currentUser || !content.trim()) return;
+    const newReply: ForumReply = {
+      id: 'freply_' + Date.now(),
+      topicId,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userUsername: currentUser.username || currentUser.name.toLowerCase().replace(/\s+/g, ''),
+      userAvatar: currentUser.avatar,
+      content: content.trim(),
+      createdAt: new Date().toISOString(),
+      likes: 0,
+      likedBy: [],
+    };
+    setForumTopics((prev) =>
+      prev.map((t) => {
+        if (t.id !== topicId) return t;
+        const updated = {
+          ...t,
+          replies: [...(t.replies || []), newReply],
+        };
+        saveForumTopicToFirebase(updated);
+        return updated;
+      })
+    );
+  };
+
+  const deleteForumReply = (topicId: string, replyId: string) => {
+    if (!currentUser) return;
+    setForumTopics((prev) =>
+      prev.map((t) => {
+        if (t.id !== topicId) return t;
+        const updated = {
+          ...t,
+          replies: (t.replies || []).filter((r) => r.id !== replyId),
+        };
+        saveForumTopicToFirebase(updated);
+        return updated;
+      })
+    );
+  };
+
+  const toggleLikeForumTopic = (topicId: string) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setForumTopics((prev) =>
+      prev.map((t) => {
+        if (t.id !== topicId) return t;
+        const isLiked = t.likedBy.includes(currentUser.id);
+        const newLikedBy = isLiked ? t.likedBy.filter((id) => id !== currentUser.id) : [...t.likedBy, currentUser.id];
+        const updated = {
+          ...t,
+          likedBy: newLikedBy,
+          likes: newLikedBy.length,
+        };
+        saveForumTopicToFirebase(updated);
+        return updated;
+      })
+    );
+  };
+
+  const toggleLikeForumReply = (topicId: string, replyId: string) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setForumTopics((prev) =>
+      prev.map((t) => {
+        if (t.id !== topicId) return t;
+        const updatedReplies = (t.replies || []).map((r) => {
+          if (r.id !== replyId) return r;
+          const isLiked = r.likedBy.includes(currentUser.id);
+          const newLikedBy = isLiked ? r.likedBy.filter((id) => id !== currentUser.id) : [...r.likedBy, currentUser.id];
+          return {
+            ...r,
+            likedBy: newLikedBy,
+            likes: newLikedBy.length,
+          };
+        });
+        const updated = { ...t, replies: updatedReplies };
+        saveForumTopicToFirebase(updated);
+        return updated;
+      })
+    );
+  };
+
+  // ==========================================
+  // ARCHIVED STORIES (PDF ARCHIVE)
+  // ==========================================
+
+  const addArchivedStory = async (storyData: {
+    title: string;
+    originalAuthor: string;
+    chapterCount: string | number;
+    summary: string;
+    category?: Category | string;
+    tags?: string[];
+    pdfUrl: string;
+    pdfFileName?: string;
+    pdfFileSize?: string;
+    coverUrl?: string;
+  }): Promise<{ success: boolean; id?: string; error?: string }> => {
+    if (!currentUser) return { success: false, error: 'Giriş yapmanız gerekmektedir.' };
+    const newId = 'arch_' + Date.now();
+    const newArchived: ArchivedStory = {
+      id: newId,
+      title: storyData.title,
+      originalAuthor: storyData.originalAuthor,
+      chapterCount: String(storyData.chapterCount),
+      summary: storyData.summary,
+      category: storyData.category || 'Genel Kurgu',
+      tags: storyData.tags || [],
+      pdfUrl: storyData.pdfUrl,
+      pdfFileName: storyData.pdfFileName,
+      pdfFileSize: storyData.pdfFileSize,
+      coverUrl: storyData.coverUrl,
+      addedByUserId: currentUser.id,
+      addedByUserName: currentUser.name,
+      addedByUserUsername: currentUser.username || currentUser.name.toLowerCase().replace(/\s+/g, ''),
+      addedByUserAvatar: currentUser.avatar,
+      addedAt: new Date().toISOString(),
+      downloads: 0,
+      downloadsCount: 0,
+      likes: 0,
+      likedBy: [],
+      comments: [],
+    };
+    setArchivedStories((prev) => [newArchived, ...prev]);
+    return { success: true, id: newId };
+  };
+
+  const deleteArchivedStory = (archiveId: string) => {
+    if (!currentUser) return;
+    setArchivedStories((prev) => prev.filter((a) => a.id !== archiveId));
+  };
+
+  const toggleLikeArchivedStory = (archiveId: string) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setArchivedStories((prev) =>
+      prev.map((a) => {
+        if (a.id !== archiveId) return a;
+        const isLiked = a.likedBy.includes(currentUser.id);
+        const newLikedBy = isLiked ? a.likedBy.filter((id) => id !== currentUser.id) : [...a.likedBy, currentUser.id];
+        return {
+          ...a,
+          likedBy: newLikedBy,
+          likes: newLikedBy.length,
+        };
+      })
+    );
+  };
+
+  const addArchivedStoryComment = (archiveId: string, content: string) => {
+    if (!currentUser || !content.trim()) return;
+    const newComm: ArchivedStoryComment = {
+      id: 'arch_comm_' + Date.now(),
+      archiveId,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userUsername: currentUser.username || currentUser.name.toLowerCase().replace(/\s+/g, ''),
+      userAvatar: currentUser.avatar,
+      content: content.trim(),
+      createdAt: new Date().toISOString(),
+      likes: 0,
+      likedBy: [],
+    };
+    setArchivedStories((prev) =>
+      prev.map((a) => {
+        if (a.id !== archiveId) return a;
+        return {
+          ...a,
+          comments: [newComm, ...(a.comments || [])],
+        };
+      })
+    );
+  };
+
+  const deleteArchivedStoryComment = (archiveId: string, commentId: string) => {
+    if (!currentUser) return;
+    setArchivedStories((prev) =>
+      prev.map((a) => {
+        if (a.id !== archiveId) return a;
+        return {
+          ...a,
+          comments: (a.comments || []).filter((c) => c.id !== commentId),
+        };
+      })
+    );
+  };
+
+  const incrementArchivedStoryDownloads = (archiveId: string) => {
+    setArchivedStories((prev) =>
+      prev.map((a) => {
+        if (a.id !== archiveId) return a;
+        return {
+          ...a,
+          downloadsCount: (a.downloadsCount || 0) + 1,
+        };
+      })
+    );
+  };
+
+  // ==========================================
+  // LIBRARY & READING
+  // ==========================================
+
+  const isStoryInLibrary = (storyId: string) => {
+    if (!currentUser) return false;
+    return currentUser.library?.some((item) => item.storyId === storyId) || false;
+  };
+
+  const toggleLibraryStory = (
+    storyId: string,
+    status: 'reading' | 'want_to_read' | 'completed' | 'favorite' = 'reading'
+  ) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id !== currentUser.id) return u;
+        const currentLib = u.library || [];
+        const exists = currentLib.some((item) => item.storyId === storyId);
+        let newLib;
+        if (exists) {
+          newLib = currentLib.filter((item) => item.storyId !== storyId);
+        } else {
+          newLib = [
+            ...currentLib,
+            {
+              storyId,
+              status,
+              lastChapterIndex: 0,
+              updatedAt: new Date().toISOString().split('T')[0],
+            },
+          ];
+        }
+        const updatedUser = { ...u, library: newLib };
+        saveUserToFirebase(updatedUser);
+        return updatedUser;
+      })
+    );
+  };
+
+  // ==========================================
+  // FOLLOW SYSTEM
+  // ==========================================
+
+  const toggleFollowUser = (targetUserId: string) => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    if (targetUserId === currentUser.id) return;
+
+    const currentFollowing = currentUser.following || [];
+    const isFollowing = currentFollowing.includes(targetUserId);
+
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === currentUser.id) {
+          const newFollowing = isFollowing
+            ? (u.following || []).filter((id) => id !== targetUserId)
+            : [...(u.following || []), targetUserId];
+          const updatedUser = { ...u, following: newFollowing, followingCount: newFollowing.length };
+          saveUserToFirebase(updatedUser);
+          return updatedUser;
+        }
+        if (u.id === targetUserId) {
+          const newFollowers = isFollowing
+            ? (u.followers || []).filter((id) => id !== currentUser.id)
+            : [...(u.followers || []), currentUser.id];
+          const updatedUser = { ...u, followers: newFollowers, followersCount: newFollowers.length };
+          saveUserToFirebase(updatedUser);
+          return updatedUser;
+        }
+        return u;
+      })
+    );
+
+    if (!isFollowing) {
+      sendNotification({
+        userId: targetUserId,
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar,
+        type: 'follow',
+        title: 'Yeni Takipçi',
+        message: `${currentUser.name} seni takip etmeye başladı.`,
+        targetUserId: currentUser.id,
+      });
+    }
+  };
+
+  // Notifications
+  const userNotifications = notifications.filter((n) => n.userId === currentUserId);
+  const unreadNotificationCount = userNotifications.filter((n) => !n.isRead).length;
+
+  const markAsRead = (notificationId: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => {
+        if (n.id === notificationId) {
+          const updated = { ...n, isRead: true };
+          saveNotificationToFirebase(updated);
+          return updated;
+        }
+        return n;
+      })
+    );
+  };
+
+  const markAllAsRead = () => {
+    setNotifications((prev) =>
+      prev.map((n) => {
+        if (n.userId === currentUserId) {
+          const updated = { ...n, isRead: true };
+          saveNotificationToFirebase(updated);
+          return updated;
+        }
+        return n;
+      })
+    );
+  };
+
+  // ==========================================
+  // ADMIN & MODERATION SYSTEM
+  // ==========================================
+  const isAdmin = Boolean(
+    currentUser && (
+      currentUser.role === 'admin' ||
+      currentUser.email?.toLowerCase() === 'semajim30@gmail.com' ||
+      currentUser.email?.toLowerCase() === 'wattyboontr@gmail.com'
+    )
+  );
+
+  const updateUserRole = (targetUserId: string, newRole: UserRole) => {
+    if (!isAdmin) return;
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id !== targetUserId) return u;
+        const updated = { ...u, role: newRole };
+        saveUserToFirebase(updated);
+        
+        const roleLabels: Record<UserRole, string> = {
+          admin: 'Yönetici (Admin)',
+          moderator: 'Moderatör',
+          author: 'Yazar',
+          user: 'Standart Üye'
+        };
+
+        sendNotification({
+          userId: targetUserId,
+          type: 'system',
+          title: '🛡️ Yetki & Rol Güncellendi',
+          message: `Hesabınızın yetki düzeyi WattyBoon yönetimi tarafından "${roleLabels[newRole] || newRole}" olarak güncellendi.`,
+        });
+        return updated;
+      })
+    );
+  };
+
+  const adminDeleteUser = (targetUserId: string, reason?: string): { success: boolean; error?: string } => {
+    if (!isAdmin) return { success: false, error: 'Bu işlem için yönetici yetkisi gereklidir.' };
+    const target = users.find((u) => u.id === targetUserId);
+    if (!target) return { success: false, error: 'Kullanıcı bulunamadı.' };
+    
+    if (target.email?.toLowerCase() === 'semajim30@gmail.com' || target.email?.toLowerCase() === 'wattyboontr@gmail.com') {
+      return { success: false, error: 'Baş yönetici hesabı silinemez veya kısıtlanamaz!' };
+    }
+
+    setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
+    deleteUserFromFirebase(targetUserId);
+
+    // If deleting self (not recommended)
+    if (currentUserId === targetUserId) {
+      logout();
+    }
+
+    return { success: true };
+  };
+
+  const adminDeleteStory = (storyId: string, reason?: string) => {
+    if (!isAdmin) return;
+    const targetStory = stories.find((s) => s.id === storyId);
+    if (!targetStory) return;
+
+    setStories((prev) => prev.filter((s) => s.id !== storyId));
+    deleteStoryFromFirebase(storyId);
+
+    if (targetStory.authorId) {
+      sendNotification({
+        userId: targetStory.authorId,
+        type: 'system',
+        title: '⚠️ Hikayeniz Yayından Kaldırıldı',
+        message: `"${targetStory.title}" adlı hikayeniz, platform kuralları veya yönetici kararı doğrultusunda yönetim ekibi tarafından yayından kaldırılmıştır.${reason ? ` Gerekçe: ${reason}` : ''}`,
+      });
+    }
+  };
+
+  const adminDeleteForumTopic = (topicId: string, reason?: string) => {
+    if (!isAdmin) return;
+    const targetTopic = forumTopics.find((t) => t.id === topicId);
+    if (!targetTopic) return;
+
+    setForumTopics((prev) => prev.filter((t) => t.id !== topicId));
+    deleteForumTopicFromFirebase(topicId);
+
+    if (targetTopic.authorId) {
+      sendNotification({
+        userId: targetTopic.authorId,
+        type: 'system',
+        title: '⚠️ Forum Konunuz Kaldırıldı',
+        message: `"${targetTopic.title}" başlıklı forum konunuz yönetim ekibi tarafından yayından kaldırılmıştır.${reason ? ` Gerekçe: ${reason}` : ''}`,
+      });
+    }
+  };
+
+  const adminDeleteForumReply = (topicId: string, replyId: string, reason?: string) => {
+    if (!isAdmin) return;
+    const targetTopic = forumTopics.find((t) => t.id === topicId);
+    if (!targetTopic) return;
+    const targetReply = targetTopic.replies?.find((r) => r.id === replyId);
+
+    setForumTopics((prev) =>
+      prev.map((t) => {
+        if (t.id !== topicId) return t;
+        const updated = {
+          ...t,
+          replies: (t.replies || []).filter((r) => r.id !== replyId),
+        };
+        saveForumTopicToFirebase(updated);
+        return updated;
+      })
+    );
+
+    if (targetReply?.userId) {
+      sendNotification({
+        userId: targetReply.userId,
+        type: 'system',
+        title: '⚠️ Forum Yanıtınız Kaldırıldı',
+        message: `"${targetTopic.title}" konusundaki yanıtınız yönetim ekibi tarafından kaldırılmıştır.${reason ? ` Gerekçe: ${reason}` : ''}`,
+      });
+    }
+  };
+
+  const adminDeleteComment = (storyId: string, commentId: string, reason?: string) => {
+    if (!isAdmin) return;
+    const targetStory = stories.find((s) => s.id === storyId);
+    if (!targetStory) return;
+    const targetComment = targetStory.comments?.find((c) => c.id === commentId);
+
+    setStories((prev) =>
+      prev.map((s) => {
+        if (s.id !== storyId) return s;
+        const updated = {
+          ...s,
+          comments: (s.comments || []).filter((c) => c.id !== commentId),
+        };
+        saveStoryToFirebase(updated);
+        return updated;
+      })
+    );
+
+    if (targetComment?.userId) {
+      sendNotification({
+        userId: targetComment.userId,
+        type: 'system',
+        title: '⚠️ Yorumunuz Kaldırıldı',
+        message: `"${targetStory.title}" adlı hikayedeki yorumunuz yönetim ekibi tarafından kaldırılmıştır.${reason ? ` Gerekçe: ${reason}` : ''}`,
+      });
+    }
+  };
+
+  const adminTogglePinForumTopic = (topicId: string) => {
+    if (!isAdmin) return;
+    setForumTopics((prev) =>
+      prev.map((t) => {
+        if (t.id !== topicId) return t;
+        const updated = { ...t, isPinned: !t.isPinned };
+        saveForumTopicToFirebase(updated);
+        return updated;
+      })
+    );
+  };
+
+  // ==========================================
+  // STORY REPORTS & MODERATION (Şikayetler)
+  // ==========================================
+
+  const submitStoryReport = async (reportData: {
+    storyId: string;
+    storyTitle: string;
+    storyCoverUrl?: string;
+    authorId: string;
+    authorName: string;
+    authorUsername?: string;
+    reason: ReportReason;
+    reasonTitle: string;
+    description: string;
+    originalSourceUrl?: string;
+  }): Promise<{ success: boolean; message: string }> => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return { success: false, message: 'Şikayette bulunmak için lütfen giriş yapınız.' };
+    }
+
+    const newReport: StoryReport = {
+      id: 'report_' + Date.now(),
+      storyId: reportData.storyId,
+      storyTitle: reportData.storyTitle,
+      storyCoverUrl: reportData.storyCoverUrl,
+      authorId: reportData.authorId,
+      authorName: reportData.authorName,
+      authorUsername: reportData.authorUsername,
+      reporterId: currentUser.id,
+      reporterName: currentUser.name,
+      reporterUsername: currentUser.username || currentUser.name.toLowerCase().replace(/\s+/g, ''),
+      reporterEmail: currentUser.email,
+      reason: reportData.reason,
+      reasonTitle: reportData.reasonTitle,
+      description: reportData.description,
+      originalSourceUrl: reportData.originalSourceUrl,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    setReports((prev) => [newReport, ...prev]);
+    await saveReportToFirebase(newReport);
+    return { 
+      success: true, 
+      message: 'Şikayetiniz yöneticilere iletildi. Çalıntı / ihlal incelemesi yapılarak gerekirse işlem uygulanacaktır.' 
+    };
+  };
+
+  const adminResolveReport = async (
+    reportId: string, 
+    status: ReportStatus, 
+    note?: string, 
+    deleteReportedStory?: boolean
+  ): Promise<boolean> => {
+    if (!isAdmin) return false;
+    const targetReport = reports.find((r) => r.id === reportId);
+    if (!targetReport) return false;
+
+    const updatedReport: StoryReport = {
+      ...targetReport,
+      status,
+      resolvedAt: new Date().toISOString(),
+      resolvedBy: currentUser?.name || 'Yönetici',
+      resolutionNote: note,
+    };
+
+    setReports((prev) => prev.map((r) => (r.id === reportId ? updatedReport : r)));
+    await saveReportToFirebase(updatedReport);
+
+    if (deleteReportedStory && targetReport.storyId) {
+      adminDeleteStory(
+        targetReport.storyId,
+        `Şikayet incelemesi sonucu kaldırıldı: ${targetReport.reasonTitle}${note ? ` (${note})` : ''}`
+      );
+    }
+
+    // Send outcome notification to reporter
+    if (targetReport.reporterId) {
+      sendNotification({
+        userId: targetReport.reporterId,
+        type: 'system',
+        title: '🛡️ Şikayet Raporunuz İncelendi',
+        message: `"${targetReport.storyTitle}" adlı hikaye hakkındaki şikayetiniz incelendi. Sonuç: ${
+          status === 'resolved' ? 'Gerekli işlem yapıldı / Eser yayından kaldırıldı' : 'İncelendi & Kural ihlali bulunamadı'
+        }.${note ? ` Yönetici Notu: ${note}` : ''}`,
+      });
+    }
+
+    return true;
+  };
+
+  const adminDeleteReport = async (reportId: string): Promise<boolean> => {
+    if (!isAdmin) return false;
+    setReports((prev) => prev.filter((r) => r.id !== reportId));
+    await deleteReportFromFirebase(reportId);
+    return true;
+  };
+
+  return (
+    <AppContext.Provider
+      value={{
+        isDarkMode,
+        toggleDarkMode,
+        isNsfwEnabled,
+        toggleNsfw,
+        selectedCategoryFilter,
+        setSelectedCategoryFilter,
+        selectedTagFilter,
+        setSelectedTagFilter,
+        currentUser,
+        users,
+        loginWithGoogle,
+        login,
+        register,
+        sendPasswordReset,
+        changePassword,
+        deleteAccount,
+        logout,
+        switchDemoUser,
+        updateProfile,
+
+        paragraphComments,
+        addParagraphComment,
+        toggleLikeParagraphComment,
+        deleteParagraphComment,
+
+        activeView,
+        setActiveView,
+        activeStoryId,
+        activeChapterIndex,
+        activeAuthorId,
+        editingStoryId,
+        openStoryDetail,
+        openStoryReader,
+        openAuthorProfile,
+        openStoryEditor,
+
+        stories,
+        saveStory,
+        deleteStory,
+        deleteChapter,
+        toggleLikeStory,
+        toggleLikeChapter,
+        addComment,
+        toggleLikeComment,
+        addReplyToComment,
+        deleteComment,
+        incrementStoryReads,
+
+        forumTopics,
+        addForumTopic,
+        deleteForumTopic,
+        addForumReply,
+        deleteForumReply,
+        toggleLikeForumTopic,
+        toggleLikeForumReply,
+
+        archivedStories,
+        addArchivedStory,
+        deleteArchivedStory,
+        toggleLikeArchivedStory,
+        addArchivedStoryComment,
+        deleteArchivedStoryComment,
+        incrementArchivedStoryDownloads,
+
+        toggleLibraryStory,
+        isStoryInLibrary,
+
+        updateReadingProgress,
+
+        createCustomList,
+        addStoryToCustomList,
+        removeStoryFromCustomList,
+        deleteCustomList,
+
+        messages,
+        unreadMessageCount,
+        sendDirectMessage,
+        markMessagesAsRead,
+        isMessagingOpen,
+        activeMessagingUserId,
+        openMessagingWithUser,
+        closeMessaging,
+
+        toggleFollowUser,
+
+        notifications: userNotifications,
+        unreadNotificationCount,
+        markAsRead,
+        markAllAsRead,
+
+        // Reports
+        reports,
+        submitStoryReport,
+        adminResolveReport,
+        adminDeleteReport,
+
+        isAdmin,
+        updateUserRole,
+        adminDeleteUser,
+        adminDeleteStory,
+        adminDeleteForumTopic,
+        adminDeleteForumReply,
+        adminDeleteComment,
+        adminTogglePinForumTopic,
+
+        isAuthModalOpen,
+        setIsAuthModalOpen,
+        autoOpenProfileSettings,
+        setAutoOpenProfileSettings,
+      }}
+    >
+      {children}
+    </AppContext.Provider>
+  );
+};
+
+export const useApp = () => {
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useApp must be used within an AppProvider');
+  }
+  return context;
+};

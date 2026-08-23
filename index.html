@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="tr" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
+    <meta name="color-scheme" content="light dark" />
+    
+    <!-- Chrome, Firefox OS, Opera and Vivaldi Theme Color -->
+    <meta name="theme-color" content="#9333ea" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#020617" media="(prefers-color-scheme: dark)" />
+    
+    <!-- Windows / Microsoft Edge / Internet Explorer Tiles -->
+    <meta name="msapplication-TileColor" content="#9333ea" />
+    <meta name="msapplication-tap-highlight" content="no" />
+    
+    <!-- Apple Safari & iOS WebApp Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="WattyBoon" />
+    <meta name="apple-touch-fullscreen" content="yes" />
+    
+    <!-- Android & Generic Mobile WebApp -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="WattyBoon" />
+    
+    <!-- Search Engine & Social Meta -->
+    <meta name="google-site-verification" content="0Be3VKFnyY7xRF1WWU5MKee5E8NyeNv-Z5BBd5kSy0I" />
+    <meta name="description" content="WattyBoon - Modern Hikaye, Roman ve Kurgu Paylaşım Platformu" />
+    <meta name="robots" content="index, follow" />
+    <title>WattyBoon | Hikaye & Kurgu Platformu</title>
+    
+    <script>
+      // Gracefully prevent unhandled promise rejections / errors from disabled dev websocket connections
+      window.addEventListener('unhandledrejection', function(event) {
+        var reason = event.reason ? (event.reason.message || String(event.reason)) : '';
+        if (reason.indexOf('WebSocket') !== -1 || reason.indexOf('websocket') !== -1 || reason.indexOf('WebChannel') !== -1) {
+          event.preventDefault();
+          event.stopImmediatePropagation && event.stopImmediatePropagation();
+        }
+      }, true);
+      window.addEventListener('error', function(event) {
+        var msg = event.message || '';
+        if (msg.indexOf('WebSocket') !== -1 || msg.indexOf('websocket') !== -1) {
+          event.preventDefault();
+          event.stopImmediatePropagation && event.stopImmediatePropagation();
+        }
+      }, true);
+    </script>
+    
+    <!-- ImgBB Upload & CDN Script -->
+    <script async src="https://imgbb.com/upload.js"></script>
+    
+    <!-- Favicon, Apple Touch Icon & Manifest for Mobile & Desktop Browsers -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/favicon.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Font Preconnect & Loading Optimization -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@700;900&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Righteous&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  </head>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-purple-200 selection:text-purple-900 dark:selection:bg-purple-900 dark:selection:text-purple-100 min-h-screen min-h-[100dvh] transition-colors duration-200">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

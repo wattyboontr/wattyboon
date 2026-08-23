@@ -1,0 +1,339 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif;
+    --font-serif: Georgia, Cambria, 'Times New Roman', Times, serif;
+    --font-display: 'Outfit', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-logo: 'Outfit', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+  }
+}
+
+/* ========================================================
+   1. UNIVERSAL CROSS-BROWSER NORMALIZATION (CHROME, SAFARI, FIREFOX, EDGE, OPERA, SAMSUNG)
+   ======================================================== */
+
+*, *::before, *::after {
+  -webkit-box-sizing: border-box;
+  -moz-box-sizing: border-box;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  height: 100%;
+  height: -webkit-fill-available;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+body {
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  touch-action: manipulation;
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+  min-height: 100dvh;
+}
+
+/* Dynamic Viewport Unit Utility Across All Browsers */
+.min-h-screen-safe {
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+  min-height: 100dvh;
+}
+
+.h-screen-safe {
+  height: 100vh;
+  height: -webkit-fill-available;
+  height: 100dvh;
+}
+
+/* ========================================================
+   2. FORM INPUTS & CROSS-BROWSER CONTROLS NORMALIZATION
+   ======================================================== */
+
+/* Prevent iOS Safari / Chrome Mobile auto-zooming into inputs on focus */
+@media screen and (max-width: 768px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Clean up native input styling across Chrome, Safari, Firefox, Edge */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="number"],
+input[type="tel"],
+input[type="url"],
+textarea,
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+/* Remove default search cancel and decoration buttons in WebKit & Blink */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+}
+
+/* Normalize number inputs (hide spinners consistently if needed) */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Chrome / Safari / Edge Autofill Background Override */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+  -webkit-text-fill-color: inherit !important;
+  -webkit-box-shadow: 0 0 0px 1000px rgba(255, 255, 255, 0.95) inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover, 
+.dark input:-webkit-autofill:focus, 
+.dark textarea:-webkit-autofill,
+.dark textarea:-webkit-autofill:hover,
+.dark textarea:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f8fafc !important;
+  -webkit-box-shadow: 0 0 0px 1000px rgba(15, 23, 42, 0.95) inset !important;
+}
+
+/* Touch feedback and tap delay fix across touch-enabled browsers */
+button, 
+[role="button"],
+a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-logo {
+  font-family: 'Cinzel Decorative', 'Syne', serif;
+  letter-spacing: 0.02em;
+}
+
+/* ========================================================
+   3. SITE-WIDE CONTENT, ANTI-COPY & ANTI-DOWNLOAD SECURITY
+   ======================================================== */
+
+/* Prevent image dragging and context callouts on Chrome, Safari, Firefox, Edge */
+img, video, canvas, svg {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+  -webkit-touch-callout: none;
+}
+
+/* Text and content unselectable by default on stories and protected interface */
+.prevent-copy,
+.story-content,
+.story-reader-text,
+.unselectable,
+.no-select {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+/* Explicitly keep all inputs, textareas, search boxes and contenteditable selectable */
+input, 
+textarea, 
+[contenteditable="true"],
+.allow-select {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+  -webkit-touch-callout: default !important;
+}
+
+/* Anti-Print & Anti-PDF Scraping Protection */
+@media print {
+  body {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  html::after {
+    content: "⚠️ WattyBoon Telif Hakkı Koruması: Bu eserin yazdırılması veya PDF olarak kaydedilmesi kısıtlanmıştır.";
+    display: block;
+    font-size: 20pt;
+    text-align: center;
+    padding-top: 100px;
+    font-family: sans-serif;
+    color: #9333ea;
+  }
+}
+
+/* ========================================================
+   4. HARDWARE ACCELERATION & BACKDROP BLUR WITH FALLBACKS
+   ======================================================== */
+
+.backdrop-blur-sm,
+.backdrop-blur-md,
+.backdrop-blur-lg,
+.backdrop-blur-xl {
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+}
+
+/* Fallback for browsers that do not support backdrop-filter */
+@supports not ((-webkit-backdrop-filter: blur(14px)) or (backdrop-filter: blur(14px))) {
+  .backdrop-blur-md,
+  .backdrop-blur-lg,
+  .backdrop-blur-xl {
+    background-color: rgba(255, 255, 255, 0.98) !important;
+  }
+  .dark .backdrop-blur-md,
+  .dark .backdrop-blur-lg,
+  .dark .backdrop-blur-xl {
+    background-color: rgba(2, 6, 23, 0.98) !important;
+  }
+}
+
+/* ========================================================
+   5. MOMENTUM SCROLLING & CROSS-BROWSER SCROLLBAR UTILITIES
+   ======================================================== */
+
+.overflow-y-auto,
+.overflow-x-auto,
+.overflow-auto,
+main,
+aside,
+[role="dialog"] {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Firefox standard scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168, 85, 247, 0.3) transparent;
+}
+
+/* WebKit / Chromium (Chrome, Edge, Safari, Opera, Samsung) custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(168, 85, 247, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 85, 247, 0.6);
+}
+
+/* Universal scrollbar hiding utility */
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.no-scrollbar,
+.scrollbar-none {
+  -ms-overflow-style: none !important;  /* IE and older Edge */
+  scrollbar-width: none !important;     /* Firefox */
+  -webkit-overflow-scrolling: touch;    /* iOS & Android momentum scrolling */
+}
+
+/* ========================================================
+   6. SAFE AREA PADDING UTILITIES (NOTCH, PUNCH HOLE & HOME BAR)
+   ======================================================== */
+
+.safe-top {
+  padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+}
+
+.safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+
+.safe-left {
+  padding-left: max(0.5rem, env(safe-area-inset-left, 0px));
+}
+
+.safe-right {
+  padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
+}
+
+/* Cross-browser keyframe animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@-webkit-keyframes fadeIn {
+  from { opacity: 0; -webkit-transform: translateY(6px); }
+  to { opacity: 1; -webkit-transform: translateY(0); }
+}
+
+.animate-fade-in {
+  -webkit-animation: fadeIn 0.25s ease-out forwards;
+  animation: fadeIn 0.25s ease-out forwards;
+}
