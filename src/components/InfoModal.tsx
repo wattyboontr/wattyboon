@@ -454,7 +454,7 @@ export const InfoModal: React.FC<InfoModalProps> = ({
                     <button
                       type="submit"
                       disabled={isSending}
-                      className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold shadow-md shadow-purple-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+                      className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold shadow-md shadow-purple-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
                     >
                       <Send className="w-4 h-4" />
                       <span>{isSending ? 'Gönderiliyor...' : 'Mesajı Gönder'}</span>

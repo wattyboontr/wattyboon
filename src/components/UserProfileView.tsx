@@ -83,7 +83,13 @@ export const UserProfileView: React.FC = () => {
     setAutoOpenProfileSettings,
     login,
     loginWithGoogle,
-    isAdmin
+    isAdmin,
+    acceptFollowRequest,
+    rejectFollowRequest,
+    cancelFollowRequest,
+    removeFollower,
+    unfollowUser,
+    openAuthorProfile
   } = useApp();
 
   // If user is not logged in and not viewing a specific other author's profile, render guest login callout
@@ -144,6 +150,18 @@ export const UserProfileView: React.FC = () => {
   const [bioInput, setBioInput] = useState(author?.bio || '');
   const [avatarInput, setAvatarInput] = useState(author?.avatar || '');
   const [coverInput, setCoverInput] = useState(author?.coverUrl || '');
+  const [isPrivateInput, setIsPrivateInput] = useState(currentUser?.isPrivate || false);
+
+  // Followers & Following Modal State
+  const [followListModal, setFollowListModal] = useState<{
+    open: boolean;
+    tab: 'followers' | 'following' | 'requests';
+    searchQuery: string;
+  }>({
+    open: false,
+    tab: 'followers',
+    searchQuery: '',
+  });
 
   // Feedback Messages
   const [profileMsg, setProfileMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -176,6 +194,7 @@ export const UserProfileView: React.FC = () => {
       setBioInput(currentUser.bio || '');
       setAvatarInput(currentUser.avatar || '');
       setCoverInput(currentUser.coverUrl || '');
+      setIsPrivateInput(currentUser.isPrivate || false);
     } else if (author) {
       setNameInput(author.name || '');
       setUsernameInput(author.username || '');
@@ -183,6 +202,7 @@ export const UserProfileView: React.FC = () => {
       setBioInput(author.bio || '');
       setAvatarInput(author.avatar || '');
       setCoverInput(author.coverUrl || '');
+      setIsPrivateInput(author.isPrivate || false);
     }
   }, [currentUser, author, isSelf]);
 
@@ -208,7 +228,7 @@ export const UserProfileView: React.FC = () => {
   const totalReads = authorStories.reduce((acc, s) => acc + (s.reads || 0), 0);
   const totalLikes = authorStories.reduce((acc, s) => acc + (s.likes || 0), 0);
 
-  // Save Profile & Credential Changes (Name, Username, Email, Bio, Images)
+  // Save Profile & Credential Changes (Name, Username, Email, Bio, Images, isPrivate)
   const handleSaveProfile = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setIsSavingProfile(true);
@@ -221,6 +241,7 @@ export const UserProfileView: React.FC = () => {
       bio: bioInput,
       avatar: avatarInput,
       coverUrl: coverInput,
+      isPrivate: isPrivateInput,
     });
 
     setIsSavingProfile(false);
@@ -429,6 +450,11 @@ export const UserProfileView: React.FC = () => {
                     {author?.name}
                   </h1>
                   <UserRoleBadge userId={author?.id || ''} role={author?.role} size="md" />
+                  {author?.isPrivate && (
+                    <span className="px-2.5 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 text-[11px] font-bold border border-purple-200 dark:border-purple-800 inline-flex items-center gap-1">
+                      <Lock className="w-3 h-3 text-purple-600 dark:text-purple-400" /> Gizli Profil
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs font-bold text-purple-600 dark:text-purple-400">
                   @{author?.username}
@@ -480,24 +506,47 @@ export const UserProfileView: React.FC = () => {
                   >
                     <MessageCircle className="w-4 h-4 text-purple-600 dark:text-purple-400" /> Mesaj Gönder
                   </button>
-                  <button
-                    onClick={() => author && toggleFollowUser(author.id)}
-                    className={`flex-1 sm:flex-initial min-h-[44px] px-6 py-2.5 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md ${
-                      isFollowing
-                        ? 'bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-300'
-                        : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:scale-105'
-                    }`}
-                  >
-                    {isFollowing ? (
-                      <>
-                        <UserCheck className="w-4 h-4" /> Takip Ediliyor
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="w-4 h-4" /> Takip Et
-                      </>
-                    )}
-                  </button>
+                  {(() => {
+                    const hasRequested = currentUser && Array.isArray(author?.followRequests) && author.followRequests.includes(currentUser.id);
+                    if (isFollowing) {
+                      return (
+                        <button
+                          onClick={() => author && unfollowUser(author.id)}
+                          className="flex-1 sm:flex-initial min-h-[44px] px-6 py-2.5 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-300 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400 cursor-pointer"
+                          title="Takipten Çık"
+                        >
+                          <UserCheck className="w-4 h-4" /> Takip Ediliyor
+                        </button>
+                      );
+                    }
+                    if (hasRequested) {
+                      return (
+                        <button
+                          onClick={() => author && cancelFollowRequest(author.id)}
+                          className="flex-1 sm:flex-initial min-h-[44px] px-5 py-2.5 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-sm bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 transition-colors cursor-pointer"
+                          title="İsteği İptal Etmek İçin Tıkla"
+                        >
+                          <Lock className="w-4 h-4 text-amber-500" /> İstek Gönderildi (İptal)
+                        </button>
+                      );
+                    }
+                    return (
+                      <button
+                        onClick={() => author && toggleFollowUser(author.id)}
+                        className="flex-1 sm:flex-initial min-h-[44px] px-6 py-2.5 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white hover:scale-105 cursor-pointer"
+                      >
+                        {author?.isPrivate ? (
+                          <>
+                            <Lock className="w-4 h-4" /> Takip İsteği Gönder
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="w-4 h-4" /> Takip Et
+                          </>
+                        )}
+                      </button>
+                    );
+                  })()}
                 </>
               )}
             </div>
@@ -686,6 +735,36 @@ export const UserProfileView: React.FC = () => {
                       placeholder="Kendinizi, yazarlık tutkunuzu veya sevdiğiniz türleri kısaca anlatın..."
                       className="w-full p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
                     />
+                  </div>
+
+                  {/* Profile Privacy Toggle (Gizli Hesap) */}
+                  <div className="p-4 rounded-2xl bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Lock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                        <span className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
+                          Gizli Hesap (Profil Gizleme)
+                        </span>
+                        {isPrivateInput && (
+                          <span className="px-2 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-black tracking-wide">
+                            Gizli
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed max-w-xl">
+                        Profilinizi gizlediğinizde, hikayelerinizi ve okuma listelerinizi yalnızca takip isteğini onayladığınız kullanıcılar görebilir. Yeni takipçiler size onay bildirimi gönderir.
+                      </p>
+                    </div>
+
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={isPrivateInput}
+                        onChange={(e) => setIsPrivateInput(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    </label>
                   </div>
 
                   <div className="flex justify-end pt-2">
@@ -1057,15 +1136,29 @@ export const UserProfileView: React.FC = () => {
               <span className="text-[11px] sm:text-xs text-slate-400">Hikaye</span>
             </div>
 
-            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50">
-              <span className="block text-lg sm:text-xl font-bold text-purple-600 dark:text-purple-400">{Array.isArray(author?.followers) ? author.followers.length : 0}</span>
-              <span className="text-[11px] sm:text-xs text-slate-400">Takipçi</span>
-            </div>
+            <button
+              onClick={() => setFollowListModal({ open: true, tab: 'followers', searchQuery: '' })}
+              className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 hover:bg-purple-50 dark:hover:bg-purple-950/60 transition-colors cursor-pointer group"
+            >
+              <span className="block text-lg sm:text-xl font-bold text-purple-600 dark:text-purple-400 group-hover:scale-105 transition-transform">
+                {Array.isArray(author?.followers) ? author.followers.length : 0}
+              </span>
+              <span className="text-[11px] sm:text-xs text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-300 font-medium">
+                Takipçi (Görüntüle)
+              </span>
+            </button>
 
-            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50">
-              <span className="block text-lg sm:text-xl font-bold text-purple-600 dark:text-purple-400">{Array.isArray(author?.following) ? author.following.length : 0}</span>
-              <span className="text-[11px] sm:text-xs text-slate-400">Takip Edilen</span>
-            </div>
+            <button
+              onClick={() => setFollowListModal({ open: true, tab: 'following', searchQuery: '' })}
+              className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 hover:bg-purple-50 dark:hover:bg-purple-950/60 transition-colors cursor-pointer group"
+            >
+              <span className="block text-lg sm:text-xl font-bold text-purple-600 dark:text-purple-400 group-hover:scale-105 transition-transform">
+                {Array.isArray(author?.following) ? author.following.length : 0}
+              </span>
+              <span className="text-[11px] sm:text-xs text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-300 font-medium">
+                Takip Edilen (Görüntüle)
+              </span>
+            </button>
 
             <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50">
               <span className="block text-lg sm:text-xl font-bold text-purple-600 dark:text-purple-400">{totalLikes}</span>
@@ -1073,10 +1166,72 @@ export const UserProfileView: React.FC = () => {
             </div>
           </div>
 
+          {/* Pending Follow Requests Callout for Self */}
+          {isSelf && currentUser?.followRequests && currentUser.followRequests.length > 0 && (
+            <div className="mt-4 p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 flex items-center justify-between gap-3 animate-pulse">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/80 text-amber-700 dark:text-amber-300">
+                  <UserPlus className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                    {currentUser.followRequests.length} Yeni Takip İsteği Bekliyor
+                  </p>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                    Profiliniz gizli olduğu için kullanıcılar onayınızı bekliyor.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setFollowListModal({ open: true, tab: 'requests', searchQuery: '' })}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-sm cursor-pointer whitespace-nowrap"
+              >
+                İstekleri İncele
+              </button>
+            </div>
+          )}
+
         </div>
       </div>
 
-      {/* Tabs Selector: Stories vs Reading Lists */}
+      {/* PRIVATE PROFILE GUARD: If account is private and viewer is neither owner nor approved follower */}
+      {author?.isPrivate && !isSelf && !isFollowing ? (
+        <div className="p-10 sm:p-16 rounded-3xl bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-900/60 shadow-xl text-center space-y-5 animate-fade-in my-6">
+          <div className="w-20 h-20 mx-auto rounded-3xl bg-purple-100 dark:bg-purple-950/80 border border-purple-300 dark:border-purple-800 flex items-center justify-center text-purple-600 dark:text-purple-400 shadow-lg shadow-purple-500/10">
+            <Lock className="w-10 h-10" />
+          </div>
+
+          <div className="max-w-md mx-auto space-y-2">
+            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
+              Bu Hesap Gizli
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+              @{author?.username} yazarının hikayelerini, bölümlerini ve okuma listelerini görebilmek için takip isteği gönderin ve onaylanmasını bekleyin.
+            </p>
+          </div>
+
+          <div>
+            {currentUser && Array.isArray(author?.followRequests) && author.followRequests.includes(currentUser.id) ? (
+              <button
+                onClick={() => author && cancelFollowRequest(author.id)}
+                className="min-h-[44px] px-6 py-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-rose-50 hover:text-rose-600 font-bold text-xs inline-flex items-center gap-2 cursor-pointer transition-colors shadow-sm"
+              >
+                <Lock className="w-4 h-4" /> İstek Gönderildi (İptal Et)
+              </button>
+            ) : (
+              <button
+                onClick={() => author && toggleFollowUser(author.id)}
+                className="min-h-[44px] px-6 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-xs inline-flex items-center gap-2 cursor-pointer shadow-lg shadow-purple-500/25 hover:scale-105 transition-all"
+              >
+                <UserPlus className="w-4 h-4" /> Takip İsteği Gönder
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Tabs Selector: Stories vs Reading Lists */}
       <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3 overflow-x-auto scrollbar-none">
         <button
           onClick={() => setProfileTab('stories')}
@@ -1259,6 +1414,263 @@ export const UserProfileView: React.FC = () => {
             </div>
           )}
         </section>
+      )}
+      </>
+      )}
+
+      {/* Followers / Following / Requests Management Modal */}
+      {followListModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[85vh]">
+            
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <UserIcon className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  {isSelf ? 'Bağlantılarım & Takipçi Yönetimi' : `${author?.name} - Bağlantılar`}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Takipçiler, takip edilenler ve bekleyen onay istekleri
+                </p>
+              </div>
+              <button
+                onClick={() => setFollowListModal({ ...followListModal, open: false, searchQuery: '' })}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Tabs */}
+            <div className="flex border-b border-slate-100 dark:border-slate-800 px-4 pt-2 gap-2 bg-slate-50/50 dark:bg-slate-800/30">
+              <button
+                onClick={() => setFollowListModal({ ...followListModal, tab: 'followers' })}
+                className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                  followListModal.tab === 'followers'
+                    ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                Takipçiler ({Array.isArray(author?.followers) ? author.followers.length : 0})
+              </button>
+
+              <button
+                onClick={() => setFollowListModal({ ...followListModal, tab: 'following' })}
+                className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                  followListModal.tab === 'following'
+                    ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                Takip Edilenler ({Array.isArray(author?.following) ? author.following.length : 0})
+              </button>
+
+              {isSelf && (
+                <button
+                  onClick={() => setFollowListModal({ ...followListModal, tab: 'requests' })}
+                  className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                    followListModal.tab === 'requests'
+                      ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  İstekler
+                  {currentUser?.followRequests && currentUser.followRequests.length > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-purple-600 text-white text-[10px] font-bold">
+                      {currentUser.followRequests.length}
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {/* Filter Input */}
+            <div className="p-3 border-b border-slate-100 dark:border-slate-800">
+              <input
+                type="text"
+                value={followListModal.searchQuery}
+                onChange={(e) => setFollowListModal({ ...followListModal, searchQuery: e.target.value })}
+                placeholder="İsim veya kullanıcı adı ile filtrele..."
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            {/* List Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 min-h-[220px]">
+              {(() => {
+                const query = followListModal.searchQuery.toLowerCase().trim();
+                
+                if (followListModal.tab === 'followers') {
+                  const followerIds = Array.isArray(author?.followers) ? author.followers : [];
+                  const followerUsers = followerIds
+                    .map((id) => users.find((u) => u.id === id))
+                    .filter((u): u is NonNullable<typeof u> => Boolean(u))
+                    .filter((u) => !query || u.name.toLowerCase().includes(query) || u.username.toLowerCase().includes(query));
+
+                  if (followerUsers.length === 0) {
+                    return (
+                      <div className="text-center py-10 text-xs text-slate-400 space-y-1">
+                        <UserIcon className="w-8 h-8 mx-auto opacity-30 text-purple-500" />
+                        <p>{query ? 'Aramanıza uygun takipçi bulunamadı.' : 'Henüz takipçi yok.'}</p>
+                      </div>
+                    );
+                  }
+
+                  return followerUsers.map((u) => (
+                    <div key={u.id} className="flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                      <button
+                        onClick={() => {
+                          setFollowListModal({ ...followListModal, open: false });
+                          openAuthorProfile(u.id);
+                        }}
+                        className="flex items-center gap-3 text-left flex-1 min-w-0 group cursor-pointer"
+                      >
+                        <img
+                          src={u.avatar || 'https://api.dicebear.com/7.x/bottts/svg?seed=Reader'}
+                          alt={u.name}
+                          className="w-10 h-10 rounded-full object-cover border border-purple-200 dark:border-purple-800 group-hover:scale-105 transition-transform"
+                        />
+                        <div className="min-w-0">
+                          <p className="font-bold text-xs text-slate-900 dark:text-slate-100 truncate group-hover:text-purple-600 dark:group-hover:text-purple-400">
+                            {u.name}
+                          </p>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            @{u.username}
+                          </p>
+                        </div>
+                      </button>
+
+                      {isSelf && (
+                        <button
+                          onClick={() => removeFollower(u.id)}
+                          className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-[11px] font-bold border border-rose-200 dark:border-rose-900 transition-colors cursor-pointer whitespace-nowrap"
+                          title="Bu kişiyi takipçilerimden çıkar"
+                        >
+                          Çıkar
+                        </button>
+                      )}
+                    </div>
+                  ));
+                }
+
+                if (followListModal.tab === 'following') {
+                  const followingIds = Array.isArray(author?.following) ? author.following : [];
+                  const followingUsers = followingIds
+                    .map((id) => users.find((u) => u.id === id))
+                    .filter((u): u is NonNullable<typeof u> => Boolean(u))
+                    .filter((u) => !query || u.name.toLowerCase().includes(query) || u.username.toLowerCase().includes(query));
+
+                  if (followingUsers.length === 0) {
+                    return (
+                      <div className="text-center py-10 text-xs text-slate-400 space-y-1">
+                        <UserCheck className="w-8 h-8 mx-auto opacity-30 text-purple-500" />
+                        <p>{query ? 'Aramanıza uygun kişi bulunamadı.' : 'Henüz takip edilen kimse yok.'}</p>
+                      </div>
+                    );
+                  }
+
+                  return followingUsers.map((u) => (
+                    <div key={u.id} className="flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                      <button
+                        onClick={() => {
+                          setFollowListModal({ ...followListModal, open: false });
+                          openAuthorProfile(u.id);
+                        }}
+                        className="flex items-center gap-3 text-left flex-1 min-w-0 group cursor-pointer"
+                      >
+                        <img
+                          src={u.avatar || 'https://api.dicebear.com/7.x/bottts/svg?seed=Writer'}
+                          alt={u.name}
+                          className="w-10 h-10 rounded-full object-cover border border-purple-200 dark:border-purple-800 group-hover:scale-105 transition-transform"
+                        />
+                        <div className="min-w-0">
+                          <p className="font-bold text-xs text-slate-900 dark:text-slate-100 truncate group-hover:text-purple-600 dark:group-hover:text-purple-400">
+                            {u.name}
+                          </p>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            @{u.username}
+                          </p>
+                        </div>
+                      </button>
+
+                      {isSelf && (
+                        <button
+                          onClick={() => unfollowUser(u.id)}
+                          className="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/60 dark:hover:text-rose-300 text-slate-700 dark:text-slate-300 text-[11px] font-bold transition-colors cursor-pointer whitespace-nowrap"
+                          title="Takipten çık"
+                        >
+                          Takipten Çık
+                        </button>
+                      )}
+                    </div>
+                  ));
+                }
+
+                if (followListModal.tab === 'requests') {
+                  const requestIds = Array.isArray(currentUser?.followRequests) ? currentUser.followRequests : [];
+                  const requesterUsers = requestIds
+                    .map((id) => users.find((u) => u.id === id))
+                    .filter((u): u is NonNullable<typeof u> => Boolean(u))
+                    .filter((u) => !query || u.name.toLowerCase().includes(query) || u.username.toLowerCase().includes(query));
+
+                  if (requesterUsers.length === 0) {
+                    return (
+                      <div className="text-center py-10 text-xs text-slate-400 space-y-1">
+                        <CheckCircle2 className="w-8 h-8 mx-auto opacity-30 text-emerald-500" />
+                        <p>{query ? 'Aramanıza uygun istek bulunamadı.' : 'Bekleyen takip isteği bulunmuyor.'}</p>
+                      </div>
+                    );
+                  }
+
+                  return requesterUsers.map((u) => (
+                    <div key={u.id} className="flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                      <button
+                        onClick={() => {
+                          setFollowListModal({ ...followListModal, open: false });
+                          openAuthorProfile(u.id);
+                        }}
+                        className="flex items-center gap-3 text-left flex-1 min-w-0 group cursor-pointer"
+                      >
+                        <img
+                          src={u.avatar || 'https://api.dicebear.com/7.x/bottts/svg?seed=Friend'}
+                          alt={u.name}
+                          className="w-10 h-10 rounded-full object-cover border border-purple-200 dark:border-purple-800 group-hover:scale-105 transition-transform"
+                        />
+                        <div className="min-w-0">
+                          <p className="font-bold text-xs text-slate-900 dark:text-slate-100 truncate group-hover:text-purple-600 dark:group-hover:text-purple-400">
+                            {u.name}
+                          </p>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            @{u.username} • Takip isteği gönderdi
+                          </p>
+                        </div>
+                      </button>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() => acceptFollowRequest(u.id)}
+                          className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold shadow-sm transition-colors cursor-pointer"
+                        >
+                          Onayla
+                        </button>
+                        <button
+                          onClick={() => rejectFollowRequest(u.id)}
+                          className="px-2.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-950/60 text-slate-600 dark:text-slate-300 text-[11px] font-bold transition-colors cursor-pointer"
+                        >
+                          Sil
+                        </button>
+                      </div>
+                    </div>
+                  ));
+                }
+
+                return null;
+              })()}
+            </div>
+
+          </div>
+        </div>
       )}
 
       {/* Create Custom List Modal */}

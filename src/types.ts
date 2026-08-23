@@ -167,8 +167,10 @@ export interface User {
   coverUrl?: string;
   bio: string;
   role?: UserRole;
+  isPrivate?: boolean; // Gizli profil / Hesap gizleme
   followers: string[]; // userIds following this user
   following: string[]; // userIds this user follows
+  followRequests?: string[]; // userIds who sent pending follow request
   library: {
     storyId: string;
     status: 'reading' | 'want_to_read' | 'completed' | 'favorite';
@@ -180,7 +182,7 @@ export interface User {
   joinedDate: string;
 }
 
-export type NotificationType = 'follow' | 'like' | 'comment' | 'new_chapter' | 'system';
+export type NotificationType = 'follow' | 'follow_request' | 'follow_accept' | 'like' | 'comment' | 'new_chapter' | 'system';
 
 export interface AppNotification {
   id: string;

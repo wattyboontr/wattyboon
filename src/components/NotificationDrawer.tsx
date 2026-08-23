@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { Bell, CheckCheck, Heart, MessageSquare, UserPlus, BookOpen, Trash2 } from 'lucide-react';
+import { Bell, CheckCheck, Heart, MessageSquare, UserPlus, BookOpen, UserCheck, ShieldCheck, Check, X } from 'lucide-react';
 
 export const NotificationDrawer: React.FC = () => {
   const { 
@@ -10,7 +10,8 @@ export const NotificationDrawer: React.FC = () => {
     openStoryReader, 
     openAuthorProfile, 
     unreadNotificationCount,
-    setActiveView 
+    acceptFollowRequest,
+    rejectFollowRequest,
   } = useApp();
 
   const handleNotificationClick = (notif: typeof notifications[0]) => {
@@ -20,8 +21,8 @@ export const NotificationDrawer: React.FC = () => {
     
     if (storyId) {
       openStoryReader(storyId, chapterIdx);
-    } else if (notif.targetUserId) {
-      openAuthorProfile(notif.targetUserId);
+    } else if (notif.targetUserId || notif.senderId) {
+      openAuthorProfile(notif.targetUserId || notif.senderId || '');
     }
   };
 
@@ -33,6 +34,10 @@ export const NotificationDrawer: React.FC = () => {
         return <MessageSquare className="w-4 h-4 text-indigo-500" />;
       case 'follow':
         return <UserPlus className="w-4 h-4 text-emerald-500" />;
+      case 'follow_request':
+        return <UserPlus className="w-4 h-4 text-purple-500" />;
+      case 'follow_accept':
+        return <UserCheck className="w-4 h-4 text-emerald-500" />;
       case 'new_chapter':
         return <BookOpen className="w-4 h-4 text-purple-500" />;
       default:
@@ -56,7 +61,7 @@ export const NotificationDrawer: React.FC = () => {
             )}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Hikayeleriniz, takipçileriniz ve yorumlar hakkında anlık güncellemeler.
+            Hikayeleriniz, takipçileriniz, takip istekleri ve etkileşimler hakkında bildirimler.
           </p>
         </div>
 
@@ -77,7 +82,7 @@ export const NotificationDrawer: React.FC = () => {
             <div
               key={notif.id}
               onClick={() => handleNotificationClick(notif)}
-              className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center gap-4 ${
+              className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center gap-4 ${
                 !notif.isRead
                   ? 'bg-purple-50/80 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800/80 shadow-sm'
                   : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800/80 opacity-80 hover:opacity-100'
@@ -105,14 +110,40 @@ export const NotificationDrawer: React.FC = () => {
                     {new Date(notif.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1">
+                <p className="text-xs text-slate-600 dark:text-slate-300">
                   {notif.message}
                 </p>
+
+                {/* If it's a follow request, show quick Accept / Reject buttons */}
+                {notif.type === 'follow_request' && notif.senderId && (
+                  <div className="flex items-center gap-2 mt-2.5">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        acceptFollowRequest(notif.senderId!);
+                        markAsRead(notif.id);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5" /> İsteği Onayla
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        rejectFollowRequest(notif.senderId!);
+                        markAsRead(notif.id);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-rose-950/50 hover:text-rose-600 dark:hover:text-rose-400 text-slate-700 dark:text-slate-300 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" /> Reddet
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Unread Indicator */}
               {!notif.isRead && (
-                <span className="w-2.5 h-2.5 rounded-full bg-purple-600 flex-shrink-0" />
+                <span className="w-2.5 h-2.5 rounded-full bg-purple-600 flex-shrink-0 self-center hidden sm:block" />
               )}
             </div>
           ))}
@@ -122,7 +153,7 @@ export const NotificationDrawer: React.FC = () => {
           <Bell className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
           <p className="text-sm font-bold text-slate-800 dark:text-slate-200">Henüz bildiriminiz yok.</p>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Yeni bir hikaye yayınlayın veya bir yazarı takip edin!
+            Yeni bir hikaye yayınlayın, yazar takip edin veya profilinizi güncelleyin!
           </p>
         </div>
       )}

@@ -68,6 +68,7 @@ export interface ProfileUpdateData {
   bio?: string;
   avatar?: string;
   coverUrl?: string;
+  isPrivate?: boolean;
 }
 
 interface AppContextType {
@@ -188,8 +189,13 @@ interface AppContextType {
   openMessagingWithUser: (userId?: string | null) => void;
   closeMessaging: () => void;
 
-  // Social / Following
+  // Social / Following & Requests
   toggleFollowUser: (targetUserId: string) => void;
+  acceptFollowRequest: (requesterUserId: string) => void;
+  rejectFollowRequest: (requesterUserId: string) => void;
+  cancelFollowRequest: (targetUserId: string) => void;
+  removeFollower: (followerUserId: string) => void;
+  unfollowUser: (targetUserId: string) => void;
 
   // Notifications
   notifications: AppNotification[];
@@ -1423,6 +1429,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let finalBio = currentUser.bio;
     let finalAvatar = currentUser.avatar;
     let finalCoverUrl = currentUser.coverUrl;
+    let finalIsPrivate = currentUser.isPrivate || false;
 
     if (typeof bioOrData === 'object' && bioOrData !== null) {
       if (bioOrData.name !== undefined) finalName = bioOrData.name.trim();
@@ -1431,6 +1438,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (bioOrData.bio !== undefined) finalBio = bioOrData.bio;
       if (bioOrData.avatar !== undefined) finalAvatar = bioOrData.avatar;
       if (bioOrData.coverUrl !== undefined) finalCoverUrl = bioOrData.coverUrl;
+      if (bioOrData.isPrivate !== undefined) finalIsPrivate = bioOrData.isPrivate;
     } else {
       if (typeof bioOrData === 'string') finalBio = bioOrData;
       if (name !== undefined) finalName = name.trim();
@@ -1480,6 +1488,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       bio: finalBio,
       avatar: finalAvatar || currentUser.avatar,
       coverUrl: finalCoverUrl !== undefined ? finalCoverUrl : currentUser.coverUrl,
+      isPrivate: finalIsPrivate,
     };
 
     // Update users state
@@ -2260,7 +2269,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // ==========================================
-  // FOLLOW SYSTEM
+  // FOLLOW & PRIVACY SYSTEM
   // ==========================================
 
   const toggleFollowUser = (targetUserId: string) => {
@@ -2270,23 +2279,90 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     if (targetUserId === currentUser.id) return;
 
+    const targetUser = users.find((u) => u.id === targetUserId);
     const currentFollowing = currentUser.following || [];
     const isFollowing = currentFollowing.includes(targetUserId);
 
+    if (isFollowing) {
+      // Unfollow directly
+      setUsers((prev) =>
+        prev.map((u) => {
+          if (u.id === currentUser.id) {
+            const newFollowing = (u.following || []).filter((id) => id !== targetUserId);
+            const updatedUser = { ...u, following: newFollowing, followingCount: newFollowing.length };
+            saveUserToFirebase(updatedUser);
+            return updatedUser;
+          }
+          if (u.id === targetUserId) {
+            const newFollowers = (u.followers || []).filter((id) => id !== currentUser.id);
+            const updatedUser = { ...u, followers: newFollowers, followersCount: newFollowers.length };
+            saveUserToFirebase(updatedUser);
+            return updatedUser;
+          }
+          return u;
+        })
+      );
+      return;
+    }
+
+    // Not following currently
+    // Check if target user has a private profile
+    if (targetUser?.isPrivate) {
+      const pendingRequests = targetUser.followRequests || [];
+      const hasRequested = pendingRequests.includes(currentUser.id);
+
+      if (hasRequested) {
+        // Cancel request
+        setUsers((prev) =>
+          prev.map((u) => {
+            if (u.id === targetUserId) {
+              const newRequests = (u.followRequests || []).filter((id) => id !== currentUser.id);
+              const updatedUser = { ...u, followRequests: newRequests };
+              saveUserToFirebase(updatedUser);
+              return updatedUser;
+            }
+            return u;
+          })
+        );
+      } else {
+        // Send follow request
+        setUsers((prev) =>
+          prev.map((u) => {
+            if (u.id === targetUserId) {
+              const newRequests = [...(u.followRequests || []), currentUser.id];
+              const updatedUser = { ...u, followRequests: newRequests };
+              saveUserToFirebase(updatedUser);
+              return updatedUser;
+            }
+            return u;
+          })
+        );
+
+        sendNotification({
+          userId: targetUserId,
+          senderId: currentUser.id,
+          senderName: currentUser.name,
+          senderAvatar: currentUser.avatar,
+          type: 'follow_request',
+          title: 'Yeni Takip İsteği',
+          message: `@${currentUser.username} (${currentUser.name}) profilinizi takip etmek istiyor.`,
+          targetUserId: currentUser.id,
+        });
+      }
+      return;
+    }
+
+    // Target is public -> Direct follow
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id === currentUser.id) {
-          const newFollowing = isFollowing
-            ? (u.following || []).filter((id) => id !== targetUserId)
-            : [...(u.following || []), targetUserId];
+          const newFollowing = [...(u.following || []), targetUserId];
           const updatedUser = { ...u, following: newFollowing, followingCount: newFollowing.length };
           saveUserToFirebase(updatedUser);
           return updatedUser;
         }
         if (u.id === targetUserId) {
-          const newFollowers = isFollowing
-            ? (u.followers || []).filter((id) => id !== currentUser.id)
-            : [...(u.followers || []), currentUser.id];
+          const newFollowers = [...(u.followers || []), currentUser.id];
           const updatedUser = { ...u, followers: newFollowers, followersCount: newFollowers.length };
           saveUserToFirebase(updatedUser);
           return updatedUser;
@@ -2295,18 +2371,160 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
-    if (!isFollowing) {
-      sendNotification({
-        userId: targetUserId,
-        senderId: currentUser.id,
-        senderName: currentUser.name,
-        senderAvatar: currentUser.avatar,
-        type: 'follow',
-        title: 'Yeni Takipçi',
-        message: `${currentUser.name} seni takip etmeye başladı.`,
-        targetUserId: currentUser.id,
-      });
-    }
+    sendNotification({
+      userId: targetUserId,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      type: 'follow',
+      title: 'Yeni Takipçi',
+      message: `${currentUser.name} seni takip etmeye başladı.`,
+      targetUserId: currentUser.id,
+    });
+  };
+
+  const acceptFollowRequest = (requesterUserId: string) => {
+    if (!currentUser) return;
+
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === currentUser.id) {
+          const newRequests = (u.followRequests || []).filter((id) => id !== requesterUserId);
+          const newFollowers = u.followers?.includes(requesterUserId)
+            ? u.followers
+            : [...(u.followers || []), requesterUserId];
+          const updatedUser = {
+            ...u,
+            followRequests: newRequests,
+            followers: newFollowers,
+            followersCount: newFollowers.length,
+          };
+          saveUserToFirebase(updatedUser);
+          return updatedUser;
+        }
+        if (u.id === requesterUserId) {
+          const newFollowing = u.following?.includes(currentUser.id)
+            ? u.following
+            : [...(u.following || []), currentUser.id];
+          const updatedUser = {
+            ...u,
+            following: newFollowing,
+            followingCount: newFollowing.length,
+          };
+          saveUserToFirebase(updatedUser);
+          return updatedUser;
+        }
+        return u;
+      })
+    );
+
+    // Send confirmation notification to the requester
+    sendNotification({
+      userId: requesterUserId,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      type: 'follow_accept',
+      title: 'Takip İsteği Onaylandı',
+      message: `@${currentUser.username} (${currentUser.name}) takip isteğinizi onayladı. Artık profili takip ediyorsunuz.`,
+      targetUserId: currentUser.id,
+    });
+
+    // Mark follow_request notification as read
+    setNotifications((prev) =>
+      prev.map((n) => {
+        if (n.userId === currentUser.id && n.type === 'follow_request' && (n.senderId === requesterUserId || n.targetUserId === requesterUserId)) {
+          return { ...n, isRead: true };
+        }
+        return n;
+      })
+    );
+  };
+
+  const rejectFollowRequest = (requesterUserId: string) => {
+    if (!currentUser) return;
+
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === currentUser.id) {
+          const newRequests = (u.followRequests || []).filter((id) => id !== requesterUserId);
+          const updatedUser = { ...u, followRequests: newRequests };
+          saveUserToFirebase(updatedUser);
+          return updatedUser;
+        }
+        return u;
+      })
+    );
+
+    // Mark notification as read
+    setNotifications((prev) =>
+      prev.map((n) => {
+        if (n.userId === currentUser.id && n.type === 'follow_request' && (n.senderId === requesterUserId || n.targetUserId === requesterUserId)) {
+          return { ...n, isRead: true };
+        }
+        return n;
+      })
+    );
+  };
+
+  const cancelFollowRequest = (targetUserId: string) => {
+    if (!currentUser) return;
+
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === targetUserId) {
+          const newRequests = (u.followRequests || []).filter((id) => id !== currentUser.id);
+          const updatedUser = { ...u, followRequests: newRequests };
+          saveUserToFirebase(updatedUser);
+          return updatedUser;
+        }
+        return u;
+      })
+    );
+  };
+
+  const removeFollower = (followerUserId: string) => {
+    if (!currentUser) return;
+
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === currentUser.id) {
+          const newFollowers = (u.followers || []).filter((id) => id !== followerUserId);
+          const updatedUser = { ...u, followers: newFollowers, followersCount: newFollowers.length };
+          saveUserToFirebase(updatedUser);
+          return updatedUser;
+        }
+        if (u.id === followerUserId) {
+          const newFollowing = (u.following || []).filter((id) => id !== currentUser.id);
+          const updatedUser = { ...u, following: newFollowing, followingCount: newFollowing.length };
+          saveUserToFirebase(updatedUser);
+          return updatedUser;
+        }
+        return u;
+      })
+    );
+  };
+
+  const unfollowUser = (targetUserId: string) => {
+    if (!currentUser) return;
+
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === currentUser.id) {
+          const newFollowing = (u.following || []).filter((id) => id !== targetUserId);
+          const updatedUser = { ...u, following: newFollowing, followingCount: newFollowing.length };
+          saveUserToFirebase(updatedUser);
+          return updatedUser;
+        }
+        if (u.id === targetUserId) {
+          const newFollowers = (u.followers || []).filter((id) => id !== currentUser.id);
+          const updatedUser = { ...u, followers: newFollowers, followersCount: newFollowers.length };
+          saveUserToFirebase(updatedUser);
+          return updatedUser;
+        }
+        return u;
+      })
+    );
   };
 
   // Notifications
@@ -2686,6 +2904,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         closeMessaging,
 
         toggleFollowUser,
+        acceptFollowRequest,
+        rejectFollowRequest,
+        cancelFollowRequest,
+        removeFollower,
+        unfollowUser,
 
         notifications: userNotifications,
         unreadNotificationCount,

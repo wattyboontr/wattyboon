@@ -16,7 +16,11 @@ import {
   ChevronRight,
   PenTool,
   Bookmark,
-  TrendingUp
+  TrendingUp,
+  MessageSquare,
+  Users,
+  ArrowRight,
+  MessagesSquare
 } from 'lucide-react';
 
 export const HomeView: React.FC = () => {
@@ -28,7 +32,8 @@ export const HomeView: React.FC = () => {
     openAuthorProfile, 
     toggleLibraryStory, 
     isStoryInLibrary, 
-    openStoryEditor
+    openStoryEditor,
+    setActiveView
   } = useApp();
 
   // Public stories available to current user
@@ -349,6 +354,33 @@ export const HomeView: React.FC = () => {
           </div>
         </section>
       )}
+
+      {/* ========================================================================= */}
+      {/* SADE VE ŞIK TOPLULUK & FORUM ÇUBUĞU */}
+      {/* ========================================================================= */}
+      <section className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 dark:from-purple-950/40 dark:via-slate-900 dark:to-purple-950/40 border border-purple-200/80 dark:border-purple-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="p-2.5 rounded-xl bg-purple-600 text-white shadow-sm shrink-0">
+            <MessagesSquare className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+              WattyBoon Topluluk & Forum
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              Yazarlık tüyoları, sohbetler ve aradığınız kurgular için topluluğa katılın.
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setActiveView('forum')}
+          className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer shrink-0"
+        >
+          <span>Foruma Git</span>
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      </section>
 
       {/* 2. Sizin İçin Önerilen Hikayeler (Recommended Stories) */}
       {recommendedStories.length > 0 && (
