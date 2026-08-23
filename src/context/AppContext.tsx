@@ -792,9 +792,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       senderId: currentUser.id,
       senderName: currentUser.name,
       senderAvatar: currentUser.avatar,
-      type: 'system',
-      title: 'Yeni Mesaj',
-      message: `${currentUser.name} sana bir mesaj gönderdi.`,
+      targetUserId: currentUser.id,
+      type: 'message',
+      title: '💬 Yeni Mesaj',
+      message: `${currentUser.name}: "${content.trim().slice(0, 50)}${content.length > 50 ? '...' : ''}"`,
     });
 
     // Email Notification to receiver if they have an email address
@@ -1752,6 +1753,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : u
         )
       );
+
+      // Notify followers of new story
+      const authorFollowers = users.filter(
+        (u) => u.id !== currentUser.id && (u.following || []).includes(currentUser.id)
+      );
+      authorFollowers.forEach((follower) => {
+        sendNotification({
+          userId: follower.id,
+          actorId: currentUser.id,
+          senderId: currentUser.id,
+          senderName: currentUser.name,
+          senderAvatar: currentUser.avatar,
+          type: 'new_story',
+          title: '✨ Takip Ettiğin Yazardan Yeni Hikaye!',
+          message: `${currentUser.name} (@${currentUser.username}) yeni bir hikaye yayınladı: "${newStory.title}". Hemen keşfet!`,
+          storyId: targetId,
+          targetStoryId: targetId,
+        });
+      });
     }
 
     return targetId;
@@ -2008,6 +2028,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setForumTopics((prev) => [newTopic, ...prev]);
     saveForumTopicToFirebase(newTopic);
+
+    // Notify followers of new forum post
+    const authorFollowers = users.filter(
+      (u) => u.id !== currentUser.id && (u.following || []).includes(currentUser.id)
+    );
+    authorFollowers.forEach((follower) => {
+      sendNotification({
+        userId: follower.id,
+        actorId: currentUser.id,
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar,
+        type: 'forum_post',
+        title: '💬 Takip Ettiğin Yazardan Yeni Forum Konusu',
+        message: `${currentUser.name} (@${currentUser.username}) forumda yeni bir konu açtı: "${title.trim()}".`,
+        targetUserId: currentUser.id,
+      });
+    });
+
     return newId;
   };
 

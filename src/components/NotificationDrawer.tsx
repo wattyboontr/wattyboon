@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { Bell, CheckCheck, Heart, MessageSquare, UserPlus, BookOpen, UserCheck, ShieldCheck, Check, X } from 'lucide-react';
+import { Bell, CheckCheck, Heart, MessageSquare, UserPlus, BookOpen, UserCheck, Sparkles, MessagesSquare, Check, X } from 'lucide-react';
 
 export const NotificationDrawer: React.FC = () => {
   const { 
@@ -8,7 +8,10 @@ export const NotificationDrawer: React.FC = () => {
     markAsRead, 
     markAllAsRead, 
     openStoryReader, 
+    openStoryDetail,
     openAuthorProfile, 
+    openMessagingWithUser,
+    setActiveView,
     unreadNotificationCount,
     acceptFollowRequest,
     rejectFollowRequest,
@@ -19,7 +22,15 @@ export const NotificationDrawer: React.FC = () => {
     const storyId = notif.targetStoryId || notif.storyId;
     const chapterIdx = notif.targetChapterIndex !== undefined ? notif.targetChapterIndex : (notif.chapterIndex || 0);
     
-    if (storyId) {
+    if (notif.type === 'message') {
+      openMessagingWithUser(notif.senderId || notif.targetUserId || null);
+    } else if (notif.type === 'forum_post') {
+      setActiveView('forum');
+    } else if (notif.type === 'new_story') {
+      if (storyId) {
+        openStoryDetail(storyId);
+      }
+    } else if (storyId) {
       openStoryReader(storyId, chapterIdx);
     } else if (notif.targetUserId || notif.senderId) {
       openAuthorProfile(notif.targetUserId || notif.senderId || '');
@@ -32,6 +43,12 @@ export const NotificationDrawer: React.FC = () => {
         return <Heart className="w-4 h-4 text-rose-500 fill-current" />;
       case 'comment':
         return <MessageSquare className="w-4 h-4 text-indigo-500" />;
+      case 'message':
+        return <MessageSquare className="w-4 h-4 text-emerald-500 fill-emerald-500/20" />;
+      case 'forum_post':
+        return <MessagesSquare className="w-4 h-4 text-blue-500" />;
+      case 'new_story':
+        return <Sparkles className="w-4 h-4 text-amber-500" />;
       case 'follow':
         return <UserPlus className="w-4 h-4 text-emerald-500" />;
       case 'follow_request':

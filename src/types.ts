@@ -182,7 +182,17 @@ export interface User {
   joinedDate: string;
 }
 
-export type NotificationType = 'follow' | 'follow_request' | 'follow_accept' | 'like' | 'comment' | 'new_chapter' | 'system';
+export type NotificationType = 
+  | 'follow' 
+  | 'follow_request' 
+  | 'follow_accept' 
+  | 'like' 
+  | 'comment' 
+  | 'new_chapter' 
+  | 'new_story' 
+  | 'message' 
+  | 'forum_post' 
+  | 'system';
 
 export interface AppNotification {
   id: string;
