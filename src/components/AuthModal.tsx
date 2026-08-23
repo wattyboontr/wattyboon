@@ -174,8 +174,8 @@ export const AuthModal: React.FC = () => {
     }
   };
 
-  // Handle Register - Step 1: Send Verification OTP to email
-  const handleRegisterInitiate = async (e: React.FormEvent) => {
+  // Handle Register: Direct creation and login
+  const handleRegisterDirect = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedName = name.trim();
     const trimmedUsername = username.trim().replace(/^@/, '');
@@ -198,22 +198,20 @@ export const AuthModal: React.FC = () => {
     setErrorMsg('');
     setSuccessMsg('');
 
-    // Send 6-digit confirmation code to email
-    const sendRes = await authSendVerificationCode(trimmedEmail);
-    setLoading(false);
-
-    if (sendRes.success) {
-      setCodeSent(true);
-      setPendingAction('register');
-      setActiveTab('otp_verify');
-      if (sendRes.localCode) {
-        setOtpCode(sendRes.localCode);
-        setSuccessMsg(`Onay kodu (${sendRes.localCode}) ${trimmedEmail} adresinize iletildi.`);
+    try {
+      const regRes = await register(trimmedName, trimmedUsername, trimmedEmail, password);
+      setLoading(false);
+      if (regRes.success) {
+        setIsAuthModalOpen(false);
+        setAutoOpenProfileSettings(true);
+        setActiveView('profile');
+        resetForm();
       } else {
-        setSuccessMsg(`Onay kodu ${trimmedEmail} adresinize iletildi. Lütfen gelen 6 haneli kodu giriniz.`);
+        setErrorMsg(regRes.error || 'Kayıt tamamlanamadı.');
       }
-    } else {
-      setErrorMsg(sendRes.error || 'Onay kodu gönderilemedi. Lütfen tekrar deneyiniz.');
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMsg(err.message || 'Kayıt sırasında bir hata oluştu.');
     }
   };
 
@@ -300,15 +298,13 @@ export const AuthModal: React.FC = () => {
     setErrorMsg('');
     setSuccessMsg('');
 
-    const res = await authResetPassword(email.trim().toLowerCase());
+    const res = await authPasswordReset(email.trim().toLowerCase());
     setLoading(false);
 
     if (res.success) {
-      setPendingAction('reset');
-      setActiveTab('otp_verify');
-      setSuccessMsg('Şifre sıfırlama kodu e-postanıza gönderildi. Kodu ve yeni şifrenizi giriniz.');
+      setSuccessMsg(res.message || 'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.');
     } else {
-      setErrorMsg(res.error || 'İstek gönderilemedi.');
+      setErrorMsg(res.error || 'İstek gönderilemedi. Lütfen e-posta adresinizi kontrol ediniz.');
     }
   };
 
@@ -389,18 +385,16 @@ export const AuthModal: React.FC = () => {
             <ShieldCheck className="w-4 h-4 text-emerald-300" />
             {activeTab === 'google_select'
               ? 'Google hesabınızı seçerek tek tıkla doğrudan giriş yapın.'
-              : activeTab === 'otp_verify'
-              ? 'E-posta adresinize gönderilen güvenlik kodunu doğrulayın.'
               : activeTab === 'forgot'
-              ? 'Şifrenizi e-posta onay koduyla yenileyin.'
+              ? 'Şifre sıfırlama bağlantısı e-posta adresinize gönderilir.'
               : activeTab === 'register'
-              ? 'Kayıt olunca e-postanıza onay kodu gönderilir.'
+              ? 'Hemen ücretsiz bir WattyBoon hesabı oluşturun.'
               : 'Giriş yapın ve sınırsız hikaye dünyasına katılın.'}
           </p>
         </div>
 
         {/* Navigation Tabs */}
-        {activeTab !== 'otp_verify' && activeTab !== 'forgot' && activeTab !== 'google_select' && (
+        {activeTab !== 'forgot' && activeTab !== 'google_select' && (
           <div className="flex border-b border-slate-100 dark:border-slate-800 text-xs font-bold">
             <button
               onClick={() => { setActiveTab('login'); setErrorMsg(''); setSuccessMsg(''); }}
@@ -420,7 +414,7 @@ export const AuthModal: React.FC = () => {
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
-              Kayıt Ol (Onay Kodlu)
+              Kayıt Ol
             </button>
           </div>
         )}
@@ -784,9 +778,9 @@ export const AuthModal: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 2: REGISTER WITH EMAIL VERIFICATION */}
+          {/* TAB 2: REGISTER FORM */}
           {activeTab === 'register' && (
-            <form onSubmit={handleRegisterInitiate} className="space-y-3">
+            <form onSubmit={handleRegisterDirect} className="space-y-3">
               <div>
                 <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
                   Adınız & Soyadınız
@@ -823,7 +817,7 @@ export const AuthModal: React.FC = () => {
 
               <div>
                 <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                  E-posta Adresi (Onay Kodu İletilecek)
+                  E-posta Adresi
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -865,8 +859,8 @@ export const AuthModal: React.FC = () => {
                   <RefreshCw className="w-4 h-4 animate-spin" />
                 ) : (
                   <>
-                    <Send className="w-4 h-4" />
-                    <span>Onay Kodu Gönder & Devam Et</span>
+                    <UserIcon className="w-4 h-4" />
+                    <span>Hesabımı Oluştur & Giriş Yap</span>
                   </>
                 )}
               </button>
@@ -1004,7 +998,7 @@ export const AuthModal: React.FC = () => {
                 className="w-full py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60"
               >
                 {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                <span>Sıfırlama Kodu Gönder</span>
+                <span>Sıfırlama Bağlantısı Gönder</span>
               </button>
 
               <div className="text-center pt-2">
