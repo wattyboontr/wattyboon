@@ -134,6 +134,7 @@ export const StoryEditor: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeInsertIndexRef = useRef<number>(0);
+  const loadedStoryIdRef = useRef<string | null>(null);
 
   const activeChapter = chapters[activeChapterIndex] || chapters[0] || {
     id: 'chap_def',
@@ -144,24 +145,47 @@ export const StoryEditor: React.FC = () => {
     createdAt: new Date().toISOString().split('T')[0],
   };
 
-  // Sync with existing story if changed externally
+  // Sync with existing story ONLY when opening or switching stories (prevents background sync from overwriting active edits)
   useEffect(() => {
-    if (existingStory) {
-      setTitle(existingStory.title);
-      setSummary(existingStory.summary);
-      setCategory(existingStory.category);
-      setTagsInput(existingStory.tags.join(', '));
+    if (existingStory && loadedStoryIdRef.current !== existingStory.id) {
+      loadedStoryIdRef.current = existingStory.id;
+      setTitle(existingStory.title || '');
+      setSummary(existingStory.summary || '');
+      setCategory(existingStory.category || 'Romantik');
+      setTagsInput(existingStory.tags ? existingStory.tags.join(', ') : '');
       setCoverUrl(existingStory.coverUrl || PRESET_COVERS[0]);
-      setVisibility(existingStory.visibility);
-      setStatus(existingStory.status);
+      setVisibility(existingStory.visibility || 'public');
+      setStatus(existingStory.status || 'ongoing');
       setIsNsfw(existingStory.isNsfw || false);
       setIsShortStory(existingStory.isShortStory || false);
       setMusicUrl(existingStory.musicUrl || '');
       if (existingStory.chapters && existingStory.chapters.length > 0) {
         setChapters(existingStory.chapters);
       }
+    } else if (!editingStoryId && loadedStoryIdRef.current !== 'new') {
+      loadedStoryIdRef.current = 'new';
+      setTitle('');
+      setSummary('');
+      setCategory('Romantik');
+      setTagsInput('');
+      setCoverUrl(PRESET_COVERS[0]);
+      setVisibility('public');
+      setStatus('ongoing');
+      setIsNsfw(false);
+      setIsShortStory(false);
+      setMusicUrl('');
+      setChapters([
+        {
+          id: 'chap_new_1',
+          title: '1. Bölüm: Başlangıç',
+          content: '',
+          order: 1,
+          readCount: 0,
+          createdAt: new Date().toISOString().split('T')[0],
+        },
+      ]);
     }
-  }, [existingStory]);
+  }, [editingStoryId, existingStory?.id]);
 
   // Update Chapter Content
   const handleChapterContentChange = (content: string) => {
@@ -466,6 +490,10 @@ export const StoryEditor: React.FC = () => {
       musicUrl,
       chapters,
     });
+
+    if (savedId) {
+      loadedStoryIdRef.current = savedId;
+    }
 
     setToastMessage(publishMode === 'public' ? 'Hikaye başarıyla yayınlandı!' : 'Taslak kaydedildi!');
     setSavedSuccessToast(true);
