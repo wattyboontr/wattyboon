@@ -55,6 +55,7 @@ export const AdminPanelView: React.FC = () => {
     adminDeleteUser,
     stories, 
     adminDeleteStory,
+    adminClearAllStories,
     forumTopics, 
     adminDeleteForumTopic, 
     adminDeleteForumReply, 
@@ -1314,13 +1315,30 @@ export const AdminPanelView: React.FC = () => {
 
           {/* Stories List */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">
-                Yayınlanan Hikayeler ({filteredStories.length})
-              </h3>
-              <p className="text-xs text-slate-400">
-                Kaldırılan hikayeler sistemden silinir ve yazara anında açıklama bildirimi iletilir.
-              </p>
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                  Yayınlanan Hikayeler ({filteredStories.length})
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Kaldırılan hikayeler sistemden silinir ve yazara anında açıklama bildirimi iletilir.
+                </p>
+              </div>
+
+              {stories.length > 0 && (
+                <button
+                  onClick={async () => {
+                    if (window.confirm('⚠️ TÜM HİKAYELERİ SİL: Sistemdeki VE veritabanındaki (Firebase) tüm hikayeleri kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!')) {
+                      await adminClearAllStories();
+                      showNotificationToast('Tüm hikayeler başarıyla ve kalıcı olarak silindi.');
+                    }
+                  }}
+                  className="px-4 py-2 rounded-2xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-rose-600/20 transition-all flex items-center gap-2 shrink-0"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Tüm Hikayeleri Sil
+                </button>
+              )}
             </div>
 
             {filteredStories.length === 0 ? (

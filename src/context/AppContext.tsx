@@ -46,6 +46,7 @@ import {
   saveParagraphCommentToFirebase,
   saveCommentToFirebase,
   deleteStoryFromFirebase,
+  clearAllStoriesFromFirebase,
   deleteUserFromFirebase,
   deleteForumTopicFromFirebase,
   deleteParagraphCommentFromFirebase,
@@ -228,6 +229,7 @@ interface AppContextType {
   updateUserRole: (targetUserId: string, newRole: UserRole) => void;
   adminDeleteUser: (targetUserId: string, reason?: string) => { success: boolean; error?: string };
   adminDeleteStory: (storyId: string, reason?: string) => void;
+  adminClearAllStories: () => Promise<void>;
   adminDeleteForumTopic: (topicId: string, reason?: string) => void;
   adminDeleteForumReply: (topicId: string, replyId: string, reason?: string) => void;
   adminDeleteComment: (storyId: string, commentId: string, reason?: string) => void;
@@ -632,9 +634,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [stories, setStories] = useState<Story[]>(() => {
     try {
       const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}stories`);
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed.filter(Boolean).map(normalizeStory);
         }
       }
@@ -661,24 +663,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!isMounted || !Array.isArray(fbStories)) return;
 
       const normalizedFb = fbStories.filter(Boolean).map(normalizeStory);
-
-      setStories((prev) => {
-        const map = new Map<string, Story>();
-
-        // 1. Add all stories from Firebase
-        normalizedFb.forEach((s) => map.set(s.id, s));
-
-        // 2. Keep any newly created local stories that were added in current session
-        prev.forEach((s) => {
-          if (s && s.id && !s.id.startsWith('story_gecenin_') && !s.id.startsWith('story_yildizlarin_') && !s.id.startsWith('story_sonbahar_')) {
-            if (!map.has(s.id) && normalizedFb.length === 0) {
-              map.set(s.id, normalizeStory(s));
-            }
-          }
-        });
-
-        return Array.from(map.values());
-      });
+      setStories(normalizedFb);
     };
 
     // 1. Initial fetch from Firebase Firestore & RTDB
@@ -2949,12 +2934,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const adminDeleteStory = (storyId: string, reason?: string) => {
     if (!isAdmin) return;
     const targetStory = stories.find((s) => s.id === storyId);
-    if (!targetStory) return;
 
     setStories((prev) => prev.filter((s) => s.id !== storyId));
     deleteStoryFromFirebase(storyId);
 
-    if (targetStory.authorId) {
+    if (targetStory?.authorId) {
       sendNotification({
         userId: targetStory.authorId,
         type: 'system',
@@ -2962,6 +2946,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         message: `"${targetStory.title}" adlı hikayeniz, platform kuralları veya yönetici kararı doğrultusunda yönetim ekibi tarafından yayından kaldırılmıştır.${reason ? ` Gerekçe: ${reason}` : ''}`,
       });
     }
+  };
+
+  const adminClearAllStories = async () => {
+    if (!isAdmin) return;
+    setStories([]);
+    try {
+      localStorage.setItem(`${LOCAL_STORAGE_PREFIX}stories`, JSON.stringify([]));
+    } catch {}
+    await clearAllStoriesFromFirebase();
   };
 
   const adminDeleteForumTopic = (topicId: string, reason?: string) => {
@@ -3257,6 +3250,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateUserRole,
         adminDeleteUser,
         adminDeleteStory,
+        adminClearAllStories,
         adminDeleteForumTopic,
         adminDeleteForumReply,
         adminDeleteComment,

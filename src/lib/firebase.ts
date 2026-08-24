@@ -484,6 +484,8 @@ export const authLogout = firebaseLogoutUser;
 // ==========================================
 
 // 1. STORIES (Hikayeler)
+const deletedStoryIdsInFirebase = new Set<string>();
+
 export async function fetchStoriesFromFirebase(): Promise<Story[]> {
   const storiesMap = new Map<string, Story>();
 
@@ -496,7 +498,7 @@ export async function fetchStoriesFromFirebase(): Promise<Story[]> {
         const data = d.data();
         if (data && typeof data === 'object') {
           const id = data.id || d.id;
-          if (id) {
+          if (id && !deletedStoryIdsInFirebase.has(id)) {
             storiesMap.set(id, { ...data, id } as Story);
           }
         }
@@ -517,7 +519,7 @@ export async function fetchStoriesFromFirebase(): Promise<Story[]> {
           val.forEach((item, idx) => {
             if (item && typeof item === 'object') {
               const id = item.id || `rtdb_${p.replace(/\//g, '_')}_${idx}`;
-              if (!storiesMap.has(id)) {
+              if (id && !deletedStoryIdsInFirebase.has(id) && !storiesMap.has(id)) {
                 storiesMap.set(id, { ...item, id } as Story);
               }
             }
@@ -526,7 +528,7 @@ export async function fetchStoriesFromFirebase(): Promise<Story[]> {
           Object.entries(val).forEach(([key, item]: [string, any]) => {
             if (item && typeof item === 'object') {
               const id = item.id || key;
-              if (!storiesMap.has(id)) {
+              if (id && !deletedStoryIdsInFirebase.has(id) && !storiesMap.has(id)) {
                 storiesMap.set(id, { ...item, id } as Story);
               }
             }
@@ -550,9 +552,13 @@ export function subscribeToStoriesFromFirebase(callback: (stories: Story[]) => v
 
   const emitMerged = () => {
     const combined = new Map<string, Story>();
-    firestoreStories.forEach((s, id) => combined.set(id, s));
+    firestoreStories.forEach((s, id) => {
+      if (!deletedStoryIdsInFirebase.has(id)) {
+        combined.set(id, s);
+      }
+    });
     rtdbStories.forEach((s, id) => {
-      if (!combined.has(id)) {
+      if (!deletedStoryIdsInFirebase.has(id) && !combined.has(id)) {
         combined.set(id, s);
       }
     });
@@ -568,7 +574,7 @@ export function subscribeToStoriesFromFirebase(callback: (stories: Story[]) => v
         const data = d.data();
         if (data && typeof data === 'object') {
           const id = data.id || d.id;
-          if (id) {
+          if (id && !deletedStoryIdsInFirebase.has(id)) {
             firestoreStories.set(id, { ...data, id } as Story);
           }
         }
@@ -593,14 +599,18 @@ export function subscribeToStoriesFromFirebase(callback: (stories: Story[]) => v
           val.forEach((item, idx) => {
             if (item && typeof item === 'object') {
               const id = item.id || `rtdb_story_${idx}`;
-              rtdbStories.set(id, { ...item, id } as Story);
+              if (id && !deletedStoryIdsInFirebase.has(id)) {
+                rtdbStories.set(id, { ...item, id } as Story);
+              }
             }
           });
         } else if (val && typeof val === 'object') {
           Object.entries(val).forEach(([key, item]: [string, any]) => {
             if (item && typeof item === 'object') {
               const id = item.id || key;
-              rtdbStories.set(id, { ...item, id } as Story);
+              if (id && !deletedStoryIdsInFirebase.has(id)) {
+                rtdbStories.set(id, { ...item, id } as Story);
+              }
             }
           });
         }
@@ -621,6 +631,8 @@ export function subscribeToStoriesFromFirebase(callback: (stories: Story[]) => v
 
 export async function saveStoryToFirebase(story: Story): Promise<void> {
   if (!story || !story.id) return;
+  deletedStoryIdsInFirebase.delete(story.id);
+
   // Save to Firestore collections
   try {
     await setDoc(doc(db, 'stories', story.id), story, { merge: true });
@@ -644,24 +656,43 @@ export async function saveStoryToFirebase(story: Story): Promise<void> {
 
 export async function deleteStoryFromFirebase(storyId: string): Promise<void> {
   if (!storyId) return;
-  try {
-    await deleteDoc(doc(db, 'stories', storyId));
-  } catch (e) {}
-  try {
-    await remove(ref(rtdb, `stories/${storyId}`));
-  } catch (e) {}
+  deletedStoryIdsInFirebase.add(storyId);
+
+  const firestoreCollections = ['stories', 'wattyboon_stories', 'hikayeler', 'books', 'user_stories'];
+  for (const colName of firestoreCollections) {
+    try {
+      await deleteDoc(doc(db, colName, storyId));
+    } catch (e) {}
+  }
+
+  const rtdbPaths = ['stories', 'wattyboon_stories', 'wattyboon/stories', 'hikayeler', 'books'];
+  for (const p of rtdbPaths) {
+    try {
+      await remove(ref(rtdb, `${p}/${storyId}`));
+    } catch (e) {}
+  }
 }
 
 export async function clearAllStoriesFromFirebase(): Promise<void> {
-  try {
-    const snap = await getDocs(collection(db, 'stories'));
-    const batch = writeBatch(db);
-    snap.forEach((d) => batch.delete(d.ref));
-    await batch.commit();
-  } catch (e) {}
-  try {
-    await remove(ref(rtdb, 'stories'));
-  } catch (e) {}
+  const firestoreCollections = ['stories', 'wattyboon_stories', 'hikayeler', 'books', 'user_stories'];
+  for (const colName of firestoreCollections) {
+    try {
+      const snap = await getDocs(collection(db, colName));
+      const batch = writeBatch(db);
+      snap.forEach((d) => {
+        deletedStoryIdsInFirebase.add(d.id);
+        batch.delete(d.ref);
+      });
+      await batch.commit();
+    } catch (e) {}
+  }
+
+  const rtdbPaths = ['stories', 'wattyboon_stories', 'wattyboon/stories', 'hikayeler', 'books'];
+  for (const p of rtdbPaths) {
+    try {
+      await remove(ref(rtdb, p));
+    } catch (e) {}
+  }
 }
 
 // 2. USERS (Üyeler & Profiller)
