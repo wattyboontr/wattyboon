@@ -120,8 +120,8 @@ export const StoryEditor: React.FC = () => {
   );
   const [activeChapterIndex, setActiveChapterIndex] = useState<number>(0);
   
-  // Editor mode inside writing screen: 'visual' (Wattpad block mode), 'edit' (Markdown text), 'preview' (Live Reader preview)
-  const [editorViewMode, setEditorViewMode] = useState<'visual' | 'edit' | 'preview'>('visual');
+  // Editor mode inside writing screen: 'edit' (Dümdüz sınırsız metin yazma alanı), 'preview' (Canlı Okuyucu Önizleme)
+  const [editorViewMode, setEditorViewMode] = useState<'edit' | 'preview'>('edit');
 
   // Modal States
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -305,42 +305,34 @@ export const StoryEditor: React.FC = () => {
     }
   };
 
-  // Formatting Syntax Helper (Supports both Textarea and Visual Mode)
-  const applyFormatting = (syntaxStart: string, syntaxEnd: string = '') => {
-    if (editorViewMode === 'edit') {
-      const textarea = document.getElementById('chapter-content-textarea') as HTMLTextAreaElement | null;
-      if (textarea) {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const text = activeChapter.content;
-        const selectedText = text.substring(start, end);
-        const replacement = `${syntaxStart}${selectedText || 'metin'}${syntaxEnd}`;
-        const newContent = text.substring(0, start) + replacement + text.substring(end);
-        handleChapterContentChange(newContent);
-        return;
-      }
-    }
+  // Helper to insert formatted text or images at current cursor position
+  const insertAtCursor = (syntaxStart: string, syntaxEnd: string = '') => {
+    const textarea = document.getElementById('chapter-content-textarea') as HTMLTextAreaElement | null;
+    const current = activeChapter.content || '';
 
-    // In Visual Mode: Apply to the active paragraph block
-    const blocks = parseBlocks(activeChapter.content);
-    const targetIdx = focusedBlockIndex >= 0 && focusedBlockIndex < blocks.length ? focusedBlockIndex : 0;
-    const block = blocks[targetIdx];
-    
-    if (block && block.type === 'text') {
-      const currentText = block.text || '';
-      block.text = currentText ? `${currentText} ${syntaxStart}vurgulanmış metin${syntaxEnd}` : `${syntaxStart}vurgulanmış metin${syntaxEnd}`;
-      handleChapterContentChange(serializeBlocks(blocks));
-    }
-  };
-
-  // Device Chapter Image Upload (Inserts at the specific line/block where user triggered it!)
-  const triggerInlineImageUpload = (insertAfterIndex?: number) => {
-    activeInsertIndexRef.current = insertAfterIndex !== undefined ? insertAfterIndex : focusedBlockIndex;
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
+    if (textarea) {
+      const start = textarea.selectionStart ?? current.length;
+      const end = textarea.selectionEnd ?? current.length;
+      const selectedText = current.substring(start, end);
+      const replacement = selectedText 
+        ? `${syntaxStart}${selectedText}${syntaxEnd}` 
+        : `${syntaxStart}${syntaxEnd}`;
+      
+      const newContent = current.substring(0, start) + replacement + current.substring(end);
+      handleChapterContentChange(newContent);
+      
+      setTimeout(() => {
+        textarea.focus();
+        const cursorPosition = start + syntaxStart.length + (selectedText ? selectedText.length : 0);
+        textarea.setSelectionRange(cursorPosition, cursorPosition);
+      }, 50);
+    } else {
+      const replacement = `${syntaxStart}${syntaxEnd}`;
+      handleChapterContentChange(current ? `${current}\n\n${replacement}` : replacement);
     }
   };
 
+  // Device Chapter Image Upload (Inserts image markdown cleanly at cursor position!)
   const handleChapterImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -354,7 +346,7 @@ export const StoryEditor: React.FC = () => {
     try {
       const hostedUrl = await uploadImageToHost(file, file.name);
       if (hostedUrl) {
-        insertImageAtPosition(hostedUrl, activeInsertIndexRef.current);
+        insertAtCursor(`\n\n![Hikaye Görseli](${hostedUrl})\n\n`);
       }
     } catch (err) {
       console.error('Chapter image upload error:', err);
@@ -400,15 +392,15 @@ export const StoryEditor: React.FC = () => {
     const updated = [...chapters, newChap];
     setChapters(updated);
     setActiveChapterIndex(updated.length - 1);
-    // Switch straight to the clean Wattpad writing screen
+    // Switch straight to the clean continuous writing screen
     setScreenMode('writing');
-    setEditorViewMode('visual');
+    setEditorViewMode('edit');
   };
 
   const handleEditChapter = (index: number) => {
     setActiveChapterIndex(index);
     setScreenMode('writing');
-    setEditorViewMode('visual');
+    setEditorViewMode('edit');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -886,25 +878,25 @@ export const StoryEditor: React.FC = () => {
               <div className="flex items-center gap-1">
                 <button 
                   type="button"
-                  onClick={() => applyFormatting('**', '**')} 
+                  onClick={() => insertAtCursor('**', '**')} 
                   className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-slate-700 dark:text-slate-200" 
-                  title="Kalın Yazı"
+                  title="Kalın Yazı (**metin**)"
                 >
                   <Bold className="w-4 h-4" />
                 </button>
 
                 <button 
                   type="button"
-                  onClick={() => applyFormatting('*', '*')} 
+                  onClick={() => insertAtCursor('*', '*')} 
                   className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 italic text-slate-700 dark:text-slate-200" 
-                  title="İtalik Yazı"
+                  title="İtalik Yazı (*metin*)"
                 >
                   <Italic className="w-4 h-4" />
                 </button>
 
                 <button 
                   type="button"
-                  onClick={() => applyFormatting('<u>', '</u>')} 
+                  onClick={() => insertAtCursor('<u>', '</u>')} 
                   className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200" 
                   title="Altı Çizili"
                 >
@@ -913,7 +905,7 @@ export const StoryEditor: React.FC = () => {
 
                 <button 
                   type="button"
-                  onClick={() => applyFormatting('~~', '~~')} 
+                  onClick={() => insertAtCursor('~~', '~~')} 
                   className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200" 
                   title="Üstü Çizili"
                 >
@@ -924,7 +916,7 @@ export const StoryEditor: React.FC = () => {
 
                 <button 
                   type="button"
-                  onClick={() => applyFormatting('# ')} 
+                  onClick={() => insertAtCursor('# ')} 
                   className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200" 
                   title="Büyük Başlık"
                 >
@@ -933,7 +925,7 @@ export const StoryEditor: React.FC = () => {
 
                 <button 
                   type="button"
-                  onClick={() => applyFormatting('> ')} 
+                  onClick={() => insertAtCursor('> ')} 
                   className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200" 
                   title="Alıntı Cümlesi"
                 >
@@ -941,194 +933,89 @@ export const StoryEditor: React.FC = () => {
                 </button>
               </div>
 
-              {/* Simple Image Upload Button in Toolbar */}
+              {/* Simple Image Upload Button & Preview Switcher */}
               <div className="flex items-center gap-2">
                 <button 
                   type="button"
-                  onClick={() => triggerInlineImageUpload(focusedBlockIndex)}
-                  className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-purple-500/20 transition-all cursor-pointer"
-                  title="İstediğin yere görsel ekle"
+                  onClick={() => {
+                    if (fileInputRef.current) {
+                      fileInputRef.current.click();
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-purple-500/20 transition-all cursor-pointer"
+                  title="Yazıda kaldığınız yere görsel ekleyin"
                 >
                   {isUploadingChapterImage ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
                   ) : (
                     <ImageIcon className="w-4 h-4" />
                   )}
-                  <span>{isUploadingChapterImage ? 'Yükleniyor...' : '🖼️ Görsel Ekle'}</span>
+                  <span>{isUploadingChapterImage ? 'Görsel Yükleniyor...' : '🖼️ Araya Görsel Ekle'}</span>
                 </button>
 
                 <button 
                   type="button"
                   onClick={() => {
-                    const url = prompt('Eklemek istediğiniz görselin Web (URL) adresini yapıştırın:');
+                    const url = prompt('Eklemek istediğiniz görselin Web (URL) adresini girin:');
                     if (url) {
-                      insertImageAtPosition(url, focusedBlockIndex);
+                      insertAtCursor(`\n\n![Hikaye Görseli](${url})\n\n`);
                     }
                   }}
-                  className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer" 
-                  title="URL ile Görsel Ekle"
+                  className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-colors cursor-pointer" 
+                  title="Link İle Görsel Ekle"
                 >
-                  <span>Link İle Görsel</span>
+                  <span>URL İle Görsel</span>
                 </button>
-              </div>
 
-            </div>
+                <div className="h-5 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
 
-            {/* Editor Workspace: Simple & Child-Friendly Visual Story Writing Area */}
-            <div className="p-4 sm:p-8 flex-1 min-h-[500px] space-y-5 bg-slate-50/20 dark:bg-slate-950/10">
-              {parseBlocks(activeChapter.content).map((block, idx, arr) => (
-                <div 
-                  key={block.id} 
-                  className="group relative"
-                  onClick={() => setFocusedBlockIndex(idx)}
-                >
-                  {block.type === 'text' ? (
-                    <div className={`relative rounded-2xl bg-white dark:bg-slate-900 border p-4 sm:p-5 transition-all shadow-sm ${
-                      focusedBlockIndex === idx 
-                        ? 'border-purple-500 ring-2 ring-purple-500/20' 
-                        : 'border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                    }`}>
-                      
-                      {/* Block Header */}
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
-                          <Type className="w-3.5 h-3.5" /> Paragraf #{idx + 1}
-                        </span>
-                        
-                        <div className="flex items-center gap-1">
-                          {/* Easy Image Insert Button Right At This Paragraph */}
-                          <button
-                            type="button"
-                            onClick={() => triggerInlineImageUpload(idx)}
-                            className="px-2.5 py-1 rounded-xl bg-purple-50 dark:bg-purple-950/80 hover:bg-purple-100 text-purple-700 dark:text-purple-300 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer mr-2"
-                            title="Bu paragrafın altına görsel ekle"
-                          >
-                            <ImageIcon className="w-3.5 h-3.5" /> Görsel Ekle
-                          </button>
-
-                          {idx > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => handleMoveBlock(idx, 'up')}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                              title="Yukarı Taşı"
-                            >
-                              <ArrowUp className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {idx < arr.length - 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleMoveBlock(idx, 'down')}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                              title="Aşağı Taşı"
-                            >
-                              <ArrowDown className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {arr.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteBlock(idx)}
-                              className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
-                              title="Paragrafı Sil"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Textarea */}
-                      <textarea
-                        rows={Math.max(3, Math.min(16, (block.text?.split('\n').length || 1) + 2))}
-                        value={block.text || ''}
-                        onFocus={() => setFocusedBlockIndex(idx)}
-                        onChange={(e) => handleUpdateBlockText(idx, e.target.value)}
-                        placeholder="Buraya hikayeni yazmaya başla..."
-                        className="w-full bg-transparent text-slate-900 dark:text-slate-100 font-serif text-base leading-relaxed focus:outline-none resize-y placeholder-slate-400"
-                      />
-                    </div>
-                  ) : (
-                    /* Inline Image Block inserted cleanly where the author wanted */
-                    <div className="relative bg-white dark:bg-slate-900 border-2 border-purple-300 dark:border-purple-800 p-4 space-y-3 shadow-md rounded-2xl">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
-                          <ImageIcon className="w-4 h-4 text-purple-600" /> Eklenen Hikaye Görseli
-                        </span>
-
-                        <div className="flex items-center gap-1">
-                          {idx > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => handleMoveBlock(idx, 'up')}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                              title="Yukarı Taşı"
-                            >
-                              <ArrowUp className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {idx < arr.length - 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleMoveBlock(idx, 'down')}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                              title="Aşağı Taşı"
-                            >
-                              <ArrowDown className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteBlock(idx)}
-                            className="px-2.5 py-1 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 flex items-center gap-1 cursor-pointer"
-                            title="Görseli Sil"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" /> Sil
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Image Preview */}
-                      <div className="w-full max-w-2xl mx-auto overflow-hidden bg-slate-100 dark:bg-slate-950 flex flex-col items-center rounded-xl">
-                        <img
-                          src={block.url}
-                          alt={block.alt || 'Bölüm Görseli'}
-                          className="w-full max-h-[460px] object-contain block rounded-none border-0"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = PRESET_COVERS[0];
-                          }}
-                        />
-                      </div>
-
-                      {/* Caption Editor */}
-                      <div className="flex items-center gap-2 max-w-2xl mx-auto pt-1">
-                        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 shrink-0">Açıklama:</span>
-                        <input
-                          type="text"
-                          value={block.alt || ''}
-                          onChange={(e) => handleUpdateBlockAlt(idx, e.target.value)}
-                          placeholder="Görsel açıklaması (isteğe bağlı)..."
-                          className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {/* Single Clean Add New Paragraph Button */}
-              <div className="flex items-center justify-center pt-4">
                 <button
                   type="button"
-                  onClick={() => handleAddParagraphAt(parseBlocks(activeChapter.content).length - 1)}
-                  className="px-5 py-2.5 rounded-2xl bg-white dark:bg-slate-800 border-2 border-dashed border-purple-300 dark:border-purple-700/60 hover:border-purple-500 text-purple-700 dark:text-purple-300 text-xs font-extrabold flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+                  onClick={() => setEditorViewMode(editorViewMode === 'preview' ? 'edit' : 'preview')}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    editorViewMode === 'preview'
+                      ? 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 ring-1 ring-purple-400'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
+                  }`}
                 >
-                  <Plus className="w-4 h-4 text-purple-600" /> + Yeni Paragraf Ekle
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>{editorViewMode === 'preview' ? 'Yazmaya Dön' : 'Önizleme'}</span>
                 </button>
               </div>
 
             </div>
+
+            {/* Editor Workspace: Plain Continuous Writing Area (Sınırsız Düz Metin) */}
+            {editorViewMode === 'edit' ? (
+              <div className="p-4 sm:p-6 flex-1 min-h-[550px] flex flex-col bg-white dark:bg-slate-900">
+                <textarea
+                  id="chapter-content-textarea"
+                  value={activeChapter.content}
+                  onChange={(e) => handleChapterContentChange(e.target.value)}
+                  placeholder="Hikayeni buraya sınırsızca yazabilirsin... (Dilediğin uzunlukta yazabilir, istediğin yere görsel ekleyebilirsin)"
+                  className="w-full flex-1 min-h-[500px] p-2 bg-transparent text-slate-900 dark:text-slate-100 font-serif text-base sm:text-lg leading-relaxed focus:outline-none resize-y placeholder-slate-400"
+                />
+              </div>
+            ) : (
+              /* Reader Preview */
+              <div className="p-6 sm:p-8 flex-1 min-h-[550px] bg-slate-50/50 dark:bg-slate-950/30 overflow-y-auto">
+                <div className="max-w-2xl mx-auto space-y-6">
+                  <div className="border-b border-slate-200 dark:border-slate-800 pb-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                      {title || 'Hikaye'}
+                    </span>
+                    <h3 className="text-2xl font-bold font-serif text-slate-900 dark:text-slate-100 mt-1">
+                      {activeChapter.title || 'İsimsiz Bölüm'}
+                    </h3>
+                  </div>
+
+                  <FormattedContent
+                    content={activeChapter.content || 'Bu bölüm için henüz içerik yazılmadı.'}
+                    paragraphClassName="text-base font-serif text-slate-800 dark:text-slate-200 leading-relaxed"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Stats Footer */}
             <div className="px-5 py-3 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
