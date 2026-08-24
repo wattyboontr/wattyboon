@@ -36,13 +36,27 @@ export const HomeView: React.FC = () => {
     setActiveView
   } = useApp();
 
-  // Public stories available to current user
+  // Public stories available to current user (Deduplicated)
   const availableStories = useMemo(() => {
-    return (stories || []).filter((s) => {
-      if (!s) return false;
-      const isVisible = s.visibility !== 'private' || (currentUser && s.authorId === currentUser.id);
-      return isVisible;
+    const list = (stories || []).filter((s) => {
+      if (!s || !s.id) return false;
+      return s.visibility !== 'private' || (currentUser && s.authorId === currentUser.id);
     });
+
+    const map = new Map<string, typeof list[0]>();
+    list.forEach((s) => {
+      const key = `${(s.title || '').trim().toLowerCase()}___${s.authorId || s.authorUsername}`;
+      if (!map.has(key)) {
+        map.set(key, s);
+      } else {
+        const existing = map.get(key)!;
+        if ((s.chapters?.length || 0) > (existing.chapters?.length || 0)) {
+          map.set(key, s);
+        }
+      }
+    });
+
+    return Array.from(map.values());
   }, [stories, currentUser]);
 
   // Top Featured Stories for Hero Slider

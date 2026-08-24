@@ -27,8 +27,10 @@ import {
   INITIAL_MESSAGES 
 } from '../data/mockData';
 import { onAuthStateChanged } from 'firebase/auth';
-import {
+import { doc, getDoc } from 'firebase/firestore';
+import { 
   auth,
+  db,
   fetchStoriesFromFirebase,
   subscribeToStoriesFromFirebase,
   fetchUsersFromFirebase,
@@ -712,19 +714,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
+  // Helper to deduplicate stories by ID and title+author
+  const deduplicateStories = (list: Story[]): Story[] => {
+    if (!Array.isArray(list)) return [];
+    const map = new Map<string, Story>();
+    list.forEach((s) => {
+      if (!s || !s.id) return;
+      if (!map.has(s.id)) {
+        map.set(s.id, normalizeStory(s));
+      } else {
+        const existing = map.get(s.id)!;
+        if ((s.chapters?.length || 0) > (existing.chapters?.length || 0)) {
+          map.set(s.id, normalizeStory(s));
+        }
+      }
+    });
+
+    const titleAuthorMap = new Map<string, Story>();
+    Array.from(map.values()).forEach((s) => {
+      const titleKey = (s.title || '').trim().toLowerCase();
+      const authorKey = s.authorId || s.authorUsername || '';
+      const key = `${titleKey}___${authorKey}`;
+      if (!titleAuthorMap.has(key)) {
+        titleAuthorMap.set(key, s);
+      } else {
+        const existing = titleAuthorMap.get(key)!;
+        if ((s.chapters?.length || 0) > (existing.chapters?.length || 0)) {
+          titleAuthorMap.set(key, s);
+        }
+      }
+    });
+
+    return Array.from(titleAuthorMap.values());
+  };
+
   // Stories state (Stored in Firebase Firestore & Realtime DB - wattyboon-94c69)
   const [stories, setStories] = useState<Story[]>(() => {
     try {
       const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}stories`);
       if (saved !== null) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter(Boolean).map(normalizeStory);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return deduplicateStories(parsed);
         }
       }
-      return INITIAL_STORIES.map(normalizeStory);
+      return deduplicateStories(INITIAL_STORIES);
     } catch {
-      return INITIAL_STORIES.map(normalizeStory);
+      return deduplicateStories(INITIAL_STORIES);
     }
   });
 
@@ -744,8 +780,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const handleNewStories = (fbStories: Story[]) => {
       if (!isMounted || !Array.isArray(fbStories)) return;
 
-      const normalizedFb = fbStories.filter(Boolean).map(normalizeStory);
-      setStories(normalizedFb);
+      const deduplicated = deduplicateStories(fbStories);
+      if (deduplicated.length > 0) {
+        setStories(deduplicated);
+      }
     };
 
     // 1. Initial fetch from Firebase Firestore & RTDB

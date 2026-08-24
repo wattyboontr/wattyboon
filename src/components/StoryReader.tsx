@@ -53,13 +53,23 @@ export const StoryReader: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isChapterMenuOpen, setIsChapterMenuOpen] = useState<boolean>(false);
 
-  const story = stories.find((s) => s.id === activeStoryId) || stories[0];
+  // Preserve reading story state so background sync updates do not reset or jump reading session
+  const activeStoryFromContext = stories.find((s) => s.id === activeStoryId) || (activeStoryId ? null : stories[0]);
+  const [readingStory, setReadingStory] = useState(activeStoryFromContext);
 
   useEffect(() => {
-    if (story && currentUser) {
+    if (activeStoryFromContext) {
+      setReadingStory(activeStoryFromContext);
+    }
+  }, [activeStoryId, activeStoryFromContext?.id, activeStoryFromContext?.updatedAt]);
+
+  const story = readingStory || activeStoryFromContext || stories[0];
+
+  useEffect(() => {
+    if (story?.id && currentUser && activeChapterIndex !== undefined) {
       updateReadingProgress(story.id, activeChapterIndex);
     }
-  }, [story?.id, activeChapterIndex, currentUser]);
+  }, [story?.id, activeChapterIndex, currentUser?.id]);
 
   if (!story) {
     return (
