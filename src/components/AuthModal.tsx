@@ -38,6 +38,7 @@ export const AuthModal: React.FC = () => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -56,7 +57,7 @@ export const AuthModal: React.FC = () => {
     setErrorMsg('');
     setSuccessMsg('');
 
-    const res = await login(email, password);
+    const res = await login(email, password, rememberMe);
     setLoading(false);
 
     if (res.success) {
@@ -90,7 +91,7 @@ export const AuthModal: React.FC = () => {
     setErrorMsg('');
     setSuccessMsg('');
 
-    const res = await register(trimmedName, trimmedUsername, trimmedEmail, password);
+    const res = await register(trimmedName, trimmedUsername, trimmedEmail, password, rememberMe);
     setLoading(false);
 
     if (res.success) {
@@ -110,7 +111,7 @@ export const AuthModal: React.FC = () => {
     setSuccessMsg('');
 
     try {
-      const res = await loginWithGoogle();
+      const res = await loginWithGoogle(undefined, undefined, rememberMe);
       setLoading(false);
 
       if (res.success) {
@@ -314,6 +315,21 @@ export const AuthModal: React.FC = () => {
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-purple-500 font-medium transition-all"
                   />
                 </div>
+              </div>
+
+              {/* Oturumu Açık Tut (Beni Hatırla) Checkbox */}
+              <div className="flex items-center justify-between pt-1">
+                <label className="flex items-center gap-2 cursor-pointer select-none group">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-purple-600 focus:ring-purple-500 cursor-pointer accent-purple-600 transition-all"
+                  />
+                  <span className="text-slate-700 dark:text-slate-300 font-semibold text-[11px] group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                    Oturumu Açık Tut (Beni Hatırla)
+                  </span>
+                </label>
               </div>
 
               <button

@@ -57,7 +57,8 @@ import {
   firebaseLoginUser,
   firebaseRegisterUser,
   firebasePasswordReset,
-  firebaseLogoutUser
+  firebaseLogoutUser,
+  setAuthPersistence
 } from '../lib/firebase';
 
 export type { ViewType };
@@ -90,9 +91,9 @@ interface AppContextType {
   // Auth & User
   currentUser: User | null;
   users: User[];
-  loginWithGoogle: (customEmail?: string, customName?: string) => Promise<{ success: boolean; error?: string; domainError?: boolean }>;
-  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
-  register: (name: string, username: string, email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithGoogle: (customEmail?: string, customName?: string, rememberMe?: boolean) => Promise<{ success: boolean; error?: string; domainError?: boolean }>;
+  login: (email: string, password?: string, rememberMe?: boolean) => Promise<{ success: boolean; error?: string }>;
+  register: (name: string, username: string, email: string, password?: string, rememberMe?: boolean) => Promise<{ success: boolean; error?: string }>;
   sendPasswordReset: (email: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   changePassword: (newPassword: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   deleteAccount: () => Promise<{ success: boolean; message?: string; error?: string }>;
@@ -479,12 +480,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Current logged in user (Single persistent account)
   const [currentUserId, setCurrentUserId] = useState<string>(() => {
     try {
-      const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}current_user_id`) || localStorage.getItem('wattyboon_current_user_id');
-      if (saved) return saved;
-      const activeUserRaw = localStorage.getItem('wattyboon_active_user');
-      if (activeUserRaw) {
-        const activeUser = JSON.parse(activeUserRaw);
-        if (activeUser && activeUser.id) return activeUser.id;
+      const isRememberMe = localStorage.getItem('wattyboon_remember_me') !== 'false';
+      if (isRememberMe) {
+        const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}current_user_id`) || localStorage.getItem('wattyboon_current_user_id');
+        if (saved) return saved;
+        const activeUserRaw = localStorage.getItem('wattyboon_active_user');
+        if (activeUserRaw) {
+          const activeUser = JSON.parse(activeUserRaw);
+          if (activeUser && activeUser.id) return activeUser.id;
+        }
+      } else {
+        const sessionSaved = sessionStorage.getItem('wattyboon_current_user_id');
+        if (sessionSaved) return sessionSaved;
       }
       return '';
     } catch {
@@ -504,15 +511,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     try {
-      localStorage.setItem(`${LOCAL_STORAGE_PREFIX}current_user_id`, currentUserId);
-      if (currentUserId) {
-        localStorage.setItem('wattyboon_current_user_id', currentUserId);
+      const isRememberMe = localStorage.getItem('wattyboon_remember_me') !== 'false';
+      if (isRememberMe) {
+        localStorage.setItem(`${LOCAL_STORAGE_PREFIX}current_user_id`, currentUserId);
+        if (currentUserId) {
+          localStorage.setItem('wattyboon_current_user_id', currentUserId);
+        } else {
+          localStorage.removeItem('wattyboon_current_user_id');
+          localStorage.removeItem('wattyboon_active_user');
+        }
+        if (currentUser) {
+          localStorage.setItem('wattyboon_active_user', JSON.stringify(currentUser));
+        }
       } else {
+        localStorage.removeItem(`${LOCAL_STORAGE_PREFIX}current_user_id`);
         localStorage.removeItem('wattyboon_current_user_id');
         localStorage.removeItem('wattyboon_active_user');
-      }
-      if (currentUser) {
-        localStorage.setItem('wattyboon_active_user', JSON.stringify(currentUser));
+        if (currentUserId) {
+          sessionStorage.setItem('wattyboon_current_user_id', currentUserId);
+        } else {
+          sessionStorage.removeItem('wattyboon_current_user_id');
+        }
       }
     } catch (e) {
       console.warn('localStorage setItem current_user_id error:', e);
@@ -522,9 +541,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Initial Auth Session Check with Firebase Auth
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      const isRememberMe = localStorage.getItem('wattyboon_remember_me') !== 'false';
       if (fbUser) {
-        setCurrentUserId(fbUser.uid);
-        localStorage.setItem('wattyboon_current_user_id', fbUser.uid);
+        if (isRememberMe) {
+          setCurrentUserId(fbUser.uid);
+          localStorage.setItem('wattyboon_current_user_id', fbUser.uid);
+        } else {
+          const sessionUser = sessionStorage.getItem('wattyboon_current_user_id');
+          if (sessionUser && sessionUser === fbUser.uid) {
+            setCurrentUserId(fbUser.uid);
+          } else {
+            // Session expired / not remembered -> log out
+            firebaseLogoutUser();
+            setCurrentUserId('');
+          }
+        }
       }
     });
     return () => unsubscribe();
@@ -1044,7 +1075,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // Helper to parse route from initial URL (supporting clean paths like /sitemap, /kesfet and legacy query params)
+  // Helper to parse route from initial URL (supporting clean paths like /sitemap, /kesfet, hash routes and legacy query params)
   const getInitialRouteFromUrl = (): {
     view: ViewType;
     storyId: string | null;
@@ -1055,7 +1086,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     tag?: string;
   } => {
     try {
-      const pathname = (typeof window !== 'undefined' ? window.location.pathname : '/').replace(/\/+$/, '') || '/';
+      let rawPath = typeof window !== 'undefined' ? window.location.pathname : '/';
+      if (typeof window !== 'undefined' && window.location.hash) {
+        const hashClean = window.location.hash.replace(/^#\/?/, '');
+        if (hashClean) {
+          rawPath = '/' + hashClean;
+        }
+      }
+      const pathname = rawPath.replace(/\/+$/, '') || '/';
       const pathSegments = pathname.split('/').filter(Boolean);
       const firstSegment = pathSegments[0]?.toLowerCase();
       const secondSegment = pathSegments[1];
@@ -1426,11 +1464,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // AUTHENTICATION METHODS (FIREBASE ENGINE - wattyboon-94c69)
   // ==========================================
 
-  const loginWithGoogle = async (customEmail?: string, customName?: string): Promise<{ success: boolean; error?: string; domainError?: boolean }> => {
+  const loginWithGoogle = async (customEmail?: string, customName?: string, rememberMe: boolean = true): Promise<{ success: boolean; error?: string; domainError?: boolean }> => {
     try {
+      await setAuthPersistence(rememberMe);
       const res = await firebaseGoogleLoginUser(customEmail, customName);
       if (res.success && res.user) {
         const u = res.user;
+        try {
+          localStorage.setItem('wattyboon_remember_me', rememberMe ? 'true' : 'false');
+          if (rememberMe) {
+            localStorage.setItem('wattyboon_current_user_id', u.id);
+            sessionStorage.removeItem('wattyboon_current_user_id');
+          } else {
+            sessionStorage.setItem('wattyboon_current_user_id', u.id);
+            localStorage.removeItem('wattyboon_current_user_id');
+            localStorage.removeItem('wattyboon_active_user');
+          }
+        } catch {}
         setUsers((prev) => [...prev.filter((item) => item.id !== u.id), u]);
         setCurrentUserId(u.id);
         setActiveAuthorId(u.id);
@@ -1445,13 +1495,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const login = async (emailOrUsername: string, password?: string): Promise<{ success: boolean; error?: string }> => {
+  const login = async (emailOrUsername: string, password?: string, rememberMe: boolean = true): Promise<{ success: boolean; error?: string }> => {
     const inputClean = emailOrUsername.trim();
     if (!inputClean) return { success: false, error: 'Lütfen e-posta adresinizi veya kullanıcı adınızı giriniz.' };
 
+    await setAuthPersistence(rememberMe);
     const res = await firebaseLoginUser(inputClean, password);
     if (res.success && res.user) {
       const u = res.user;
+      try {
+        localStorage.setItem('wattyboon_remember_me', rememberMe ? 'true' : 'false');
+        if (rememberMe) {
+          localStorage.setItem('wattyboon_current_user_id', u.id);
+          sessionStorage.removeItem('wattyboon_current_user_id');
+        } else {
+          sessionStorage.setItem('wattyboon_current_user_id', u.id);
+          localStorage.removeItem('wattyboon_current_user_id');
+          localStorage.removeItem('wattyboon_active_user');
+        }
+      } catch {}
       setUsers((prev) => [...prev.filter((existing) => existing.id !== u.id), u]);
       setCurrentUserId(u.id);
       setActiveAuthorId(u.id);
@@ -1460,7 +1522,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: false, error: res.error || 'Giriş yapılamadı. Bilgilerinizi kontrol ediniz.' };
   };
 
-  const register = async (name: string, username: string, email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
+  const register = async (name: string, username: string, email: string, password?: string, rememberMe: boolean = true): Promise<{ success: boolean; error?: string }> => {
     const trimmedName = name.trim();
     const trimmedEmail = email.trim().toLowerCase();
     const cleanUsername = username.trim().replace(/^@/, '');
@@ -1469,9 +1531,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Lütfen tüm zorunlu alanları doldurunuz.' };
     }
 
+    await setAuthPersistence(rememberMe);
     const res = await firebaseRegisterUser(trimmedName, cleanUsername, trimmedEmail, password);
     if (res.success && res.user) {
       const u = res.user;
+      try {
+        localStorage.setItem('wattyboon_remember_me', rememberMe ? 'true' : 'false');
+        if (rememberMe) {
+          localStorage.setItem('wattyboon_current_user_id', u.id);
+          sessionStorage.removeItem('wattyboon_current_user_id');
+        } else {
+          sessionStorage.setItem('wattyboon_current_user_id', u.id);
+          localStorage.removeItem('wattyboon_current_user_id');
+          localStorage.removeItem('wattyboon_active_user');
+        }
+      } catch {}
       setUsers((prev) => [...prev.filter((existing) => existing.id !== u.id), u]);
       setCurrentUserId(u.id);
       setActiveAuthorId(u.id);
@@ -1508,9 +1582,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     const userIdToDelete = currentUser.id;
     try {
+      localStorage.removeItem('wattyboon_remember_me');
       localStorage.removeItem('wattyboon_active_user');
       localStorage.removeItem('wattyboon_current_user_id');
       localStorage.removeItem(`${LOCAL_STORAGE_PREFIX}current_user_id`);
+      sessionStorage.removeItem('wattyboon_current_user_id');
     } catch {}
     await deleteUserDataCascade(userIdToDelete);
     await firebaseLogoutUser();
@@ -1522,9 +1598,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logout = () => {
     try {
+      localStorage.removeItem('wattyboon_remember_me');
       localStorage.removeItem('wattyboon_active_user');
       localStorage.removeItem('wattyboon_current_user_id');
       localStorage.removeItem(`${LOCAL_STORAGE_PREFIX}current_user_id`);
+      sessionStorage.removeItem('wattyboon_current_user_id');
     } catch {}
     firebaseLogoutUser();
     setCurrentUserId('');

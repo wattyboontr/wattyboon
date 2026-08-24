@@ -9,6 +9,9 @@ import {
   sendPasswordResetEmail,
   updateProfile,
   onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
   User as FirebaseUser
 } from 'firebase/auth';
 import { 
@@ -52,6 +55,15 @@ export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfi
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const rtdb = getDatabase(app, firebaseConfig.databaseURL);
+
+export async function setAuthPersistence(rememberMe: boolean = true) {
+  try {
+    const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+    await setPersistence(auth, persistence);
+  } catch (err) {
+    console.warn('Set auth persistence notice:', err);
+  }
+}
 
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
