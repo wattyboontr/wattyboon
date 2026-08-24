@@ -253,8 +253,11 @@ export async function firebaseGoogleLoginUser(customEmail?: string, customName?:
     } catch (popupErr: any) {
       console.warn('Google Popup result notice:', popupErr);
       
-      // If user provided an account or had selected one
-      if (customEmail) {
+      // Check if user is already authenticated via auth.currentUser
+      if (auth.currentUser) {
+        fbUser = auth.currentUser;
+      } else if (customEmail) {
+        // If user provided an account or had selected one
         const cleanEmail = customEmail.trim().toLowerCase();
         const isAdmin = cleanEmail === 'wattyboontr@gmail.com' || cleanEmail === 'semajim30@gmail.com';
         const fallbackUsername = cleanEmail.split('@')[0].replace(/[^a-z0-9]/gi, '');
@@ -276,40 +279,46 @@ export async function firebaseGoogleLoginUser(customEmail?: string, customName?:
         await saveUserToFirebase(mockUser);
         try {
           localStorage.setItem('wattyboon_current_user_id', mockUser.id);
+          localStorage.setItem('wattyboon_active_user', JSON.stringify(mockUser));
         } catch {}
         return { success: true, user: mockUser };
-      }
-
-      // If user closed popup intentionally
-      if (popupErr.code === 'auth/popup-closed-by-user' || popupErr.code === 'auth/cancelled-popup-request') {
+      } else if (popupErr.code === 'auth/popup-closed-by-user' || popupErr.code === 'auth/cancelled-popup-request') {
         return { success: false, error: 'Google giriş penceresi kapatıldı.' };
-      }
-      if (popupErr.code === 'auth/popup-blocked') {
+      } else if (popupErr.code === 'auth/popup-blocked') {
         return { success: false, error: 'Tarayıcınız açılır pencereyi engelledi. Lütfen pop-up izni veriniz.' };
+      } else {
+        // Fallback: seamless guest/session account
+        const fallbackEmail = `guest_${Date.now()}@wattyboon.com`;
+        const fallbackUser: User = {
+          id: `user_google_${Date.now()}`,
+          name: 'Google Kullanıcısı',
+          username: `yazar_${Math.floor(1000 + Math.random() * 9000)}`,
+          email: fallbackEmail,
+          role: 'author',
+          avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${Date.now()}`,
+          bio: 'WattyBoon yazarı ve okuru ✨',
+          joinedDate: new Date().toISOString().split('T')[0],
+          followers: [],
+          following: [],
+          library: [],
+          readingProgress: [],
+          customLists: [],
+        };
+        await saveUserToFirebase(fallbackUser);
+        try {
+          localStorage.setItem('wattyboon_current_user_id', fallbackUser.id);
+          localStorage.setItem('wattyboon_active_user', JSON.stringify(fallbackUser));
+        } catch {}
+        return { success: true, user: fallbackUser };
       }
+    }
 
-      // Fallback: seamless guest/session account
-      const fallbackEmail = `guest_${Date.now()}@wattyboon.com`;
-      const fallbackUser: User = {
-        id: `user_google_${Date.now()}`,
-        name: 'Google Kullanıcısı',
-        username: `yazar_${Math.floor(1000 + Math.random() * 9000)}`,
-        email: fallbackEmail,
-        role: 'author',
-        avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${Date.now()}`,
-        bio: 'WattyBoon yazarı ve okuru ✨',
-        joinedDate: new Date().toISOString().split('T')[0],
-        followers: [],
-        following: [],
-        library: [],
-        readingProgress: [],
-        customLists: [],
-      };
-      await saveUserToFirebase(fallbackUser);
-      try {
-        localStorage.setItem('wattyboon_current_user_id', fallbackUser.id);
-      } catch {}
-      return { success: true, user: fallbackUser };
+    if (!fbUser) {
+      fbUser = auth.currentUser;
+    }
+
+    if (!fbUser) {
+      return { success: false, error: 'Google kullanıcısına ulaşılamadı.' };
     }
 
     let userProfile: User | null = null;
@@ -357,6 +366,7 @@ export async function firebaseGoogleLoginUser(customEmail?: string, customName?:
 
     try {
       localStorage.setItem('wattyboon_current_user_id', userProfile.id);
+      localStorage.setItem('wattyboon_active_user', JSON.stringify(userProfile));
     } catch {}
 
     return { success: true, user: userProfile };

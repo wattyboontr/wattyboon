@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { 
   Story, 
   User, 
@@ -536,7 +536,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  const currentUser = currentUserId ? (users.find((u) => u.id === currentUserId) || null) : null;
+  const currentUser = useMemo(() => {
+    if (!currentUserId) return null;
+    const found = users.find((u) => u.id === currentUserId);
+    if (found) return found;
+
+    try {
+      const activeRaw = localStorage.getItem('wattyboon_active_user');
+      if (activeRaw) {
+        const parsed = JSON.parse(activeRaw);
+        if (parsed && parsed.id === currentUserId) {
+          return normalizeUser(parsed);
+        }
+      }
+    } catch {}
+
+    if (auth.currentUser && auth.currentUser.uid === currentUserId) {
+      const cleanEmail = (auth.currentUser.email || '').trim().toLowerCase();
+      const isAdmin = cleanEmail === 'wattyboontr@gmail.com' || cleanEmail === 'semajim30@gmail.com';
+      const fallbackUsername = (cleanEmail.split('@')[0] || `user_${auth.currentUser.uid.slice(0, 5)}`).replace(/[^a-z0-9]/gi, '');
+      return normalizeUser({
+        id: auth.currentUser.uid,
+        name: auth.currentUser.displayName || fallbackUsername,
+        username: fallbackUsername,
+        email: cleanEmail || `${fallbackUsername}@wattyboon.com`,
+        role: isAdmin ? 'admin' : 'author',
+        avatar: auth.currentUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${fallbackUsername}`,
+        bio: 'WattyBoon yazarı ve okuru ✨',
+        joinedDate: new Date().toISOString().split('T')[0],
+        followers: [],
+        following: [],
+        library: [],
+        readingProgress: [],
+        customLists: [],
+      });
+    }
+
+    return null;
+  }, [currentUserId, users]);
 
   useEffect(() => {
     try {
@@ -577,9 +614,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Initial Auth Session Check with Firebase Auth
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       const isRememberMe = localStorage.getItem('wattyboon_remember_me') !== 'false';
       if (fbUser) {
+        let userProfile: User | null = null;
+        try {
+          const docSnap = await getDoc(doc(db, 'users', fbUser.uid));
+          if (docSnap.exists()) {
+            userProfile = docSnap.data() as User;
+          }
+        } catch {}
+
+        const cleanEmail = (fbUser.email || '').trim().toLowerCase();
+        const isAdmin = cleanEmail === 'wattyboontr@gmail.com' || cleanEmail === 'semajim30@gmail.com';
+        const fallbackUsername = (cleanEmail.split('@')[0] || `user_${fbUser.uid.slice(0, 5)}`).replace(/[^a-z0-9]/gi, '');
+
+        if (!userProfile) {
+          userProfile = {
+            id: fbUser.uid,
+            name: fbUser.displayName || fallbackUsername,
+            username: fallbackUsername,
+            email: cleanEmail || `${fallbackUsername}@wattyboon.com`,
+            role: isAdmin ? 'admin' : 'author',
+            avatar: fbUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${fallbackUsername}`,
+            bio: 'WattyBoon yazarı ve okuru ✨',
+            joinedDate: new Date().toISOString().split('T')[0],
+            followers: [],
+            following: [],
+            library: [],
+            readingProgress: [],
+            customLists: [],
+          };
+        } else {
+          if (isAdmin) userProfile.role = 'admin';
+        }
+
+        const normalized = normalizeUser(userProfile);
+
+        setUsers((prev) => {
+          const exists = prev.some((u) => u.id === normalized.id);
+          if (exists) {
+            return prev.map((u) => (u.id === normalized.id ? normalized : u));
+          }
+          return [...prev, normalized];
+        });
+
+        try {
+          localStorage.setItem('wattyboon_active_user', JSON.stringify(normalized));
+        } catch {}
+
         if (isRememberMe) {
           setCurrentUserId(fbUser.uid);
           localStorage.setItem('wattyboon_current_user_id', fbUser.uid);
@@ -588,9 +671,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (sessionUser && sessionUser === fbUser.uid) {
             setCurrentUserId(fbUser.uid);
           } else {
-            // Session expired / not remembered -> log out
-            firebaseLogoutUser();
-            setCurrentUserId('');
+            setCurrentUserId(fbUser.uid);
+            sessionStorage.setItem('wattyboon_current_user_id', fbUser.uid);
           }
         }
       }
@@ -1494,21 +1576,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const u = res.user;
         try {
           localStorage.setItem('wattyboon_remember_me', rememberMe ? 'true' : 'false');
+          localStorage.setItem('wattyboon_active_user', JSON.stringify(u));
           if (rememberMe) {
             localStorage.setItem('wattyboon_current_user_id', u.id);
             sessionStorage.removeItem('wattyboon_current_user_id');
           } else {
             sessionStorage.setItem('wattyboon_current_user_id', u.id);
             localStorage.removeItem('wattyboon_current_user_id');
-            localStorage.removeItem('wattyboon_active_user');
           }
         } catch {}
         setUsers((prev) => [...prev.filter((item) => item.id !== u.id), u]);
         setCurrentUserId(u.id);
         setActiveAuthorId(u.id);
-        setActiveViewRaw('profile');
-        pushStateToHistory('profile', activeStoryId, activeChapterIndex, u.id);
-        setAutoOpenProfileSettings(true);
+        setIsAuthModalOpen(false);
+        setActiveViewRaw('home');
+        pushStateToHistory('home');
         return { success: true };
       }
       return { success: false, error: res.error || 'Google ile giriş yapılamadı.' };
@@ -1527,18 +1609,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const u = res.user;
       try {
         localStorage.setItem('wattyboon_remember_me', rememberMe ? 'true' : 'false');
+        localStorage.setItem('wattyboon_active_user', JSON.stringify(u));
         if (rememberMe) {
           localStorage.setItem('wattyboon_current_user_id', u.id);
           sessionStorage.removeItem('wattyboon_current_user_id');
         } else {
           sessionStorage.setItem('wattyboon_current_user_id', u.id);
           localStorage.removeItem('wattyboon_current_user_id');
-          localStorage.removeItem('wattyboon_active_user');
         }
       } catch {}
       setUsers((prev) => [...prev.filter((existing) => existing.id !== u.id), u]);
       setCurrentUserId(u.id);
       setActiveAuthorId(u.id);
+      setIsAuthModalOpen(false);
+      setActiveViewRaw('home');
+      pushStateToHistory('home');
       return { success: true };
     }
     return { success: false, error: res.error || 'Giriş yapılamadı. Bilgilerinizi kontrol ediniz.' };
@@ -1559,21 +1644,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const u = res.user;
       try {
         localStorage.setItem('wattyboon_remember_me', rememberMe ? 'true' : 'false');
+        localStorage.setItem('wattyboon_active_user', JSON.stringify(u));
         if (rememberMe) {
           localStorage.setItem('wattyboon_current_user_id', u.id);
           sessionStorage.removeItem('wattyboon_current_user_id');
         } else {
           sessionStorage.setItem('wattyboon_current_user_id', u.id);
           localStorage.removeItem('wattyboon_current_user_id');
-          localStorage.removeItem('wattyboon_active_user');
         }
       } catch {}
       setUsers((prev) => [...prev.filter((existing) => existing.id !== u.id), u]);
       setCurrentUserId(u.id);
       setActiveAuthorId(u.id);
-      setActiveViewRaw('profile');
-      pushStateToHistory('profile', activeStoryId, activeChapterIndex, u.id);
-      setAutoOpenProfileSettings(true);
+      setIsAuthModalOpen(false);
+      setActiveViewRaw('home');
+      pushStateToHistory('home');
       return { success: true };
     }
     return { success: false, error: res.error || 'Kayıt oluşturulamadı.' };

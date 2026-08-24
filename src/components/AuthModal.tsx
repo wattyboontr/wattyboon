@@ -62,8 +62,7 @@ export const AuthModal: React.FC = () => {
 
     if (res.success) {
       setIsAuthModalOpen(false);
-      setAutoOpenProfileSettings(true);
-      setActiveView('profile');
+      setActiveView('home');
       resetForm();
     } else {
       setErrorMsg(res.error || 'Giriş yapılırken bir sorun oluştu.');
@@ -96,8 +95,7 @@ export const AuthModal: React.FC = () => {
 
     if (res.success) {
       setIsAuthModalOpen(false);
-      setAutoOpenProfileSettings(true);
-      setActiveView('profile');
+      setActiveView('home');
       resetForm();
     } else {
       setErrorMsg(res.error || 'Kayıt sırasında bir hata oluştu.');
@@ -116,8 +114,7 @@ export const AuthModal: React.FC = () => {
 
       if (res.success) {
         setIsAuthModalOpen(false);
-        setAutoOpenProfileSettings(true);
-        setActiveView('profile');
+        setActiveView('home');
         resetForm();
       } else {
         setErrorMsg(res.error || 'Google ile giriş yapılamadı.');
