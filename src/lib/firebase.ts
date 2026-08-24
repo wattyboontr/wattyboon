@@ -289,7 +289,7 @@ export async function firebaseGoogleLoginUser(customEmail?: string, customName?:
       }
 
       // Fallback: seamless guest/session account
-      const fallbackEmail = 'semajim30@gmail.com';
+      const fallbackEmail = `guest_${Date.now()}@wattyboon.com`;
       const fallbackUser: User = {
         id: `user_google_${Date.now()}`,
         name: 'Google Kullanıcısı',
@@ -665,6 +665,71 @@ export async function clearAllStoriesFromFirebase(): Promise<void> {
 }
 
 // 2. USERS (Üyeler & Profiller)
+export async function cleanupDuplicateUsersFromFirebase(): Promise<User[]> {
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    const allUsers: User[] = [];
+    snap.forEach((d) => {
+      const data = d.data();
+      if (data && typeof data === 'object') {
+        allUsers.push({ ...data, id: data.id || d.id } as User);
+      }
+    });
+
+    const emailGroups = new Map<string, User[]>();
+    allUsers.forEach((u) => {
+      const email = (u.email || '').trim().toLowerCase();
+      if (email) {
+        const group = emailGroups.get(email) || [];
+        group.push(u);
+        emailGroups.set(email, group);
+      }
+    });
+
+    const keptUsers: User[] = [];
+
+    for (const [email, group] of emailGroups.entries()) {
+      if (group.length <= 1) {
+        keptUsers.push(group[0]);
+        continue;
+      }
+
+      // Found duplicate accounts for email
+      // Determine primary account to keep
+      let keepIndex = 0;
+      for (let i = 0; i < group.length; i++) {
+        const u = group[i];
+        if (u.username?.toLowerCase() === 'semajim30' || u.name === 'Sema Jim' || u.id === 'user_semajim30') {
+          keepIndex = i;
+          break;
+        }
+        if (!u.username?.startsWith('yazar_') && u.name !== 'Google Kullanıcısı') {
+          keepIndex = i;
+        }
+      }
+
+      const keptUser = group[keepIndex];
+      keptUsers.push(keptUser);
+
+      // Delete duplicates from Firestore & RTDB
+      for (let i = 0; i < group.length; i++) {
+        if (i !== keepIndex) {
+          const dupId = group[i].id;
+          if (dupId && dupId !== keptUser.id) {
+            deleteDoc(doc(db, 'users', dupId)).catch(() => {});
+            remove(ref(rtdb, `users/${dupId}`)).catch(() => {});
+          }
+        }
+      }
+    }
+
+    return keptUsers;
+  } catch (err) {
+    console.warn('Cleanup duplicate users error:', err);
+    return [];
+  }
+}
+
 export async function fetchUsersFromFirebase(): Promise<User[]> {
   const usersMap = new Map<string, User>();
 
@@ -698,7 +763,51 @@ export async function fetchUsersFromFirebase(): Promise<User[]> {
     }
   } catch (err) {}
 
-  return Array.from(usersMap.values());
+  const rawUsers = Array.from(usersMap.values());
+
+  // Deduplicate by email address (keeping semajim30 or first/primary account)
+  const emailMap = new Map<string, User>();
+  const usersWithoutEmail: User[] = [];
+
+  for (const u of rawUsers) {
+    const email = (u.email || '').trim().toLowerCase();
+    if (!email) {
+      usersWithoutEmail.push(u);
+      continue;
+    }
+
+    if (!emailMap.has(email)) {
+      emailMap.set(email, u);
+    } else {
+      const existing = emailMap.get(email)!;
+      const existingIsSemaJim = existing.username?.toLowerCase() === 'semajim30' || existing.id === 'user_semajim30';
+      const incomingIsSemaJim = u.username?.toLowerCase() === 'semajim30' || u.id === 'user_semajim30';
+
+      if (incomingIsSemaJim && !existingIsSemaJim) {
+        emailMap.set(email, u);
+        // Delete the duplicate from DB
+        deleteDoc(doc(db, 'users', existing.id)).catch(() => {});
+        remove(ref(rtdb, `users/${existing.id}`)).catch(() => {});
+      } else if (!existingIsSemaJim && !incomingIsSemaJim) {
+        const existingGeneric = existing.username?.startsWith('yazar_') || existing.name === 'Google Kullanıcısı';
+        const incomingGeneric = u.username?.startsWith('yazar_') || u.name === 'Google Kullanıcısı';
+        if (existingGeneric && !incomingGeneric) {
+          emailMap.set(email, u);
+          deleteDoc(doc(db, 'users', existing.id)).catch(() => {});
+          remove(ref(rtdb, `users/${existing.id}`)).catch(() => {});
+        } else if (incomingGeneric) {
+          deleteDoc(doc(db, 'users', u.id)).catch(() => {});
+          remove(ref(rtdb, `users/${u.id}`)).catch(() => {});
+        }
+      } else if (existingIsSemaJim) {
+        // Delete duplicate that is not semajim
+        deleteDoc(doc(db, 'users', u.id)).catch(() => {});
+        remove(ref(rtdb, `users/${u.id}`)).catch(() => {});
+      }
+    }
+  }
+
+  return [...Array.from(emailMap.values()), ...usersWithoutEmail];
 }
 
 export async function saveUserToFirebase(user: User): Promise<void> {

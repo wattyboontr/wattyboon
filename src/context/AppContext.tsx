@@ -58,7 +58,8 @@ import {
   firebaseRegisterUser,
   firebasePasswordReset,
   firebaseLogoutUser,
-  setAuthPersistence
+  setAuthPersistence,
+  cleanupDuplicateUsersFromFirebase
 } from '../lib/firebase';
 
 export type { ViewType };
@@ -457,6 +458,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
+  const deduplicateUsersList = (userList: User[]): User[] => {
+    const emailMap = new Map<string, User>();
+    const listWithoutEmail: User[] = [];
+
+    for (const u of userList) {
+      if (!u || isBannedUser(u)) continue;
+      const email = (u.email || '').trim().toLowerCase();
+      if (!email) {
+        listWithoutEmail.push(u);
+        continue;
+      }
+
+      if (!emailMap.has(email)) {
+        emailMap.set(email, u);
+      } else {
+        const existing = emailMap.get(email)!;
+        const existingIsSemaJim = existing.username?.toLowerCase() === 'semajim30' || existing.id === 'user_semajim30';
+        const incomingIsSemaJim = u.username?.toLowerCase() === 'semajim30' || u.id === 'user_semajim30';
+
+        if (incomingIsSemaJim && !existingIsSemaJim) {
+          emailMap.set(email, u);
+        } else if (!existingIsSemaJim && !incomingIsSemaJim) {
+          const existingGeneric = existing.username?.startsWith('yazar_') || existing.name === 'Google Kullanıcısı';
+          const incomingGeneric = u.username?.startsWith('yazar_') || u.name === 'Google Kullanıcısı';
+          if (existingGeneric && !incomingGeneric) {
+            emailMap.set(email, u);
+          }
+        }
+      }
+    }
+
+    return [...Array.from(emailMap.values()), ...listWithoutEmail];
+  };
+
   // Users state
   const [users, setUsers] = useState<User[]>(() => {
     try {
@@ -471,9 +506,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         } catch {}
       }
-      return parsed.map(normalizeUser).filter((u) => !isBannedUser(u));
+      return deduplicateUsersList(parsed.map(normalizeUser).filter((u) => !isBannedUser(u)));
     } catch {
-      return INITIAL_USERS.map(normalizeUser);
+      return deduplicateUsersList(INITIAL_USERS.map(normalizeUser));
     }
   });
 
@@ -566,6 +601,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let isMounted = true;
     const loadUsers = async () => {
       try {
+        await cleanupDuplicateUsersFromFirebase();
         const fbUsers = await fetchUsersFromFirebase();
         if (isMounted && Array.isArray(fbUsers) && fbUsers.length > 0) {
           setUsers((prev) => {
@@ -576,7 +612,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             fbUsers.forEach((u) => {
               map.set(u.id, normalizeUser(u));
             });
-            return Array.from(map.values()).filter((u) => !isBannedUser(u));
+            const merged = Array.from(map.values()).filter((u) => !isBannedUser(u));
+            return deduplicateUsersList(merged);
           });
         }
       } catch (err) {
