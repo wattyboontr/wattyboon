@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Story collections - Public metadata reading, authenticated or open writing
+    match /stories/{storyId} {
+      allow read: if true;
+      allow write: if true;
+
+      match /chapters/{chapterId} {
+        allow read: if request.auth != null;
+        allow write: if true;
+      }
+    }
+
+    match /wattyboon_stories/{storyId} {
+      allow read: if true;
+      allow write: if true;
+
+      match /chapters/{chapterId} {
+        allow read: if request.auth != null;
+        allow write: if true;
+      }
+    }
+
+    match /hikayeler/{storyId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /books/{storyId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /user_stories/{storyId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // User profiles collection
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Forum discussions
+    match /forum_topics/{topicId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /forum_posts/{postId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Comments & Paragraph comments & Story comments
+    match /comments/{commentId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /story_comments/{commentId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /paragraph_comments/{commentId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Notifications
+    match /notifications/{notifId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Direct Messages
+    match /messages/{messageId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Reports & Moderation
+    match /reports/{reportId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Verification Codes
+    match /otp_codes/{codeId} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}

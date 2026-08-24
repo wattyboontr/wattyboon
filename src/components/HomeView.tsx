@@ -38,8 +38,9 @@ export const HomeView: React.FC = () => {
 
   // Public stories available to current user
   const availableStories = useMemo(() => {
-    return stories.filter((s) => {
-      const isVisible = s.visibility === 'public' || (currentUser && s.authorId === currentUser.id);
+    return (stories || []).filter((s) => {
+      if (!s) return false;
+      const isVisible = s.visibility !== 'private' || (currentUser && s.authorId === currentUser.id);
       return isVisible;
     });
   }, [stories, currentUser]);

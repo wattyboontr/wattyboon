@@ -30,6 +30,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import {
   auth,
   fetchStoriesFromFirebase,
+  subscribeToStoriesFromFirebase,
   fetchUsersFromFirebase,
   fetchNotificationsFromFirebase,
   fetchMessagesFromFirebase,
@@ -371,6 +372,88 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
+  const normalizeStory = (s: any): Story => {
+    if (!s) return s;
+
+    // Handle chapters in Array or Object (Firebase RTDB maps) or fallback formats
+    let rawChapters: any[] = [];
+    if (Array.isArray(s.chapters) && s.chapters.length > 0) {
+      rawChapters = s.chapters;
+    } else if (s.chapters && typeof s.chapters === 'object') {
+      rawChapters = Object.values(s.chapters);
+    } else if (Array.isArray(s.episodes) && s.episodes.length > 0) {
+      rawChapters = s.episodes;
+    } else if (s.episodes && typeof s.episodes === 'object') {
+      rawChapters = Object.values(s.episodes);
+    } else if (Array.isArray(s.parts) && s.parts.length > 0) {
+      rawChapters = s.parts;
+    }
+
+    const validId = s.id || `story_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    const chapters = rawChapters.length > 0
+      ? rawChapters.map((c: any, idx: number) => ({
+          id: c?.id || `chap_${validId}_${idx + 1}`,
+          title: c?.title || c?.name || `${idx + 1}. Bölüm`,
+          content: c?.content || c?.text || c?.body || c?.chapterContent || '',
+          order: typeof c?.order === 'number' ? c.order : idx + 1,
+          readCount: typeof c?.readCount === 'number' ? c.readCount : (typeof c?.reads === 'number' ? c.reads : 0),
+          createdAt: c?.createdAt || s.createdAt || new Date().toISOString(),
+          likes: typeof c?.likes === 'number' ? c.likes : 0,
+          likedBy: Array.isArray(c?.likedBy) ? c.likedBy : [],
+          musicUrl: c?.musicUrl || '',
+        }))
+      : [
+          {
+            id: `chap_${validId}_1`,
+            title: '1. Bölüm',
+            content: s.content || s.text || s.body || s.summary || '',
+            order: 1,
+            readCount: typeof s.reads === 'number' ? s.reads : 0,
+            createdAt: s.createdAt || new Date().toISOString(),
+            likes: typeof s.likes === 'number' ? s.likes : 0,
+            likedBy: [],
+          }
+        ];
+
+    const isExplicitPrivate = s.visibility === 'private';
+    const visibility: Visibility = isExplicitPrivate ? 'private' : 'public';
+    const status = s.status === 'completed' || s.isCompleted ? 'completed' : 'ongoing';
+
+    const authorUsername = (s.authorUsername || s.username || s.author_username || 'yazar').replace(/^@/, '');
+
+    return {
+      id: validId,
+      title: s.title || s.name || s.storyTitle || s.baslik || 'İsimsiz Hikaye',
+      summary: s.summary || s.description || s.desc || s.synopsis || s.ozet || '',
+      coverUrl: s.coverUrl || s.cover || s.cover_url || s.image || s.imageUrl || s.kapak || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=800',
+      authorId: s.authorId || s.userId || s.author_id || 'anonim',
+      authorName: s.authorName || s.author || s.writerName || 'WattyBoon Yazarı',
+      authorUsername,
+      authorAvatar: s.authorAvatar || s.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${authorUsername}`,
+      category: (s.category as Category) || (s.genre as Category) || 'Genel',
+      tags: Array.isArray(s.tags)
+        ? s.tags.filter(Boolean)
+        : typeof s.tags === 'string'
+        ? s.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+        : ['Genel'],
+      visibility,
+      status,
+      isCompleted: s.isCompleted ?? status === 'completed',
+      likes: typeof s.likes === 'number' ? s.likes : (Array.isArray(s.likedBy) ? s.likedBy.length : 0),
+      likedBy: Array.isArray(s.likedBy) ? s.likedBy : [],
+      reads: typeof s.reads === 'number' ? s.reads : 0,
+      chapters,
+      comments: Array.isArray(s.comments) ? s.comments : [],
+      createdAt: s.createdAt || new Date().toISOString(),
+      updatedAt: s.updatedAt || s.createdAt || new Date().toISOString(),
+      readingTimeMinutes: typeof s.readingTimeMinutes === 'number' ? s.readingTimeMinutes : 5,
+      isNsfw: Boolean(s.isNsfw),
+      isShortStory: Boolean(s.isShortStory),
+      musicUrl: s.musicUrl || '',
+    };
+  };
+
   // Users state
   const [users, setUsers] = useState<User[]>(() => {
     try {
@@ -481,40 +564,82 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}stories`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter(Boolean).map(normalizeStory);
+        }
       }
-      return [];
+      return INITIAL_STORIES.map(normalizeStory);
     } catch {
-      return [];
+      return INITIAL_STORIES.map(normalizeStory);
     }
   });
 
   useEffect(() => {
     try {
-      localStorage.setItem(`${LOCAL_STORAGE_PREFIX}stories`, JSON.stringify(stories));
+      const validStories = stories.filter(Boolean);
+      localStorage.setItem(`${LOCAL_STORAGE_PREFIX}stories`, JSON.stringify(validStories));
     } catch (e) {
       console.warn('localStorage setItem stories error:', e);
     }
   }, [stories]);
 
-  // Firebase Realtime & Polling Listener for Stories (+999 Unlimited Stories)
+  // Firebase Realtime Listener & Initial Sync for Stories
   useEffect(() => {
     let isMounted = true;
-    const loadFromFirebase = async () => {
-      try {
-        const fbStories = await fetchStoriesFromFirebase();
-        if (isMounted && Array.isArray(fbStories) && fbStories.length > 0) {
-          setStories(fbStories);
+
+    const handleNewStories = (fbStories: Story[]) => {
+      if (!isMounted || !Array.isArray(fbStories)) return;
+
+      const normalizedFb = fbStories.filter(Boolean).map(normalizeStory);
+
+      setStories((prev) => {
+        const map = new Map<string, Story>();
+
+        if (normalizedFb.length > 0) {
+          // 1. Add all stories from Firebase
+          normalizedFb.forEach((s) => map.set(s.id, s));
+          // 2. Keep any newly created local stories that haven't synced yet
+          prev.forEach((s) => {
+            if (s && !map.has(s.id)) {
+              map.set(s.id, normalizeStory(s));
+            }
+          });
+        } else {
+          // Firebase is empty: keep current stories or fallback to INITIAL_STORIES
+          const baseList = prev.length > 0 ? prev : INITIAL_STORIES;
+          baseList.forEach((s) => {
+            const norm = normalizeStory(s);
+            map.set(norm.id, norm);
+            // Seed to Firebase if database is empty
+            saveStoryToFirebase(norm).catch(() => {});
+          });
         }
-      } catch (err) {
-        console.warn('[Firebase Stories Sync] Load notice:', err);
-      }
+
+        return Array.from(map.values());
+      });
     };
 
-    loadFromFirebase();
-    const interval = setInterval(loadFromFirebase, 8000);
+    // 1. Initial fetch from Firebase Firestore & RTDB
+    fetchStoriesFromFirebase()
+      .then(handleNewStories)
+      .catch((err) => console.warn('[Firebase Stories Sync] Initial fetch notice:', err));
+
+    // 2. Real-time subscription (Firestore onSnapshot + RTDB onValue)
+    const unsubscribe = subscribeToStoriesFromFirebase((liveStories) => {
+      handleNewStories(liveStories);
+    });
+
+    // 3. Fallback poll every 8 seconds
+    const interval = setInterval(async () => {
+      try {
+        const fbStories = await fetchStoriesFromFirebase();
+        handleNewStories(fbStories);
+      } catch (e) {}
+    }, 8000);
+
     return () => {
       isMounted = false;
+      try { unsubscribe(); } catch {}
       clearInterval(interval);
     };
   }, []);
@@ -1061,7 +1186,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     switch (view) {
       case 'home': {
         url = '/';
-        title = 'WattyBoon | Ana Sayfa - Edebiyat ve Hikaye Dünyası';
+        title = 'WattyBoon | Ana Sayfa - Hikaye Yaz, Oku ve Keşfet';
         break;
       }
       case 'explore': {
@@ -1659,13 +1784,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ==========================================
 
   const saveStory = (storyData: Partial<Story>): string => {
-    if (!currentUser) return '';
+    // Resolve active author (from currentUser, currentUserId or local session)
+    let author = currentUser;
+    if (!author && currentUserId) {
+      author = users.find((u) => u.id === currentUserId) || null;
+    }
+    if (!author) {
+      try {
+        const raw = localStorage.getItem('wattyboon_active_user');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.id) author = normalizeUser(parsed);
+        }
+      } catch {}
+    }
+    if (!author) {
+      const newAuthorId = currentUserId || `user_${Date.now()}`;
+      author = {
+        id: newAuthorId,
+        name: 'WattyBoon Yazarı',
+        username: `yazar_${Math.floor(1000 + Math.random() * 9000)}`,
+        email: '',
+        avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${newAuthorId}`,
+        bio: 'WattyBoon yazarı.',
+        coins: 100,
+        diamonds: 10,
+        xp: 150,
+        level: 1,
+        tier: 'bronze',
+        vipLevel: 0,
+        vipPoints: 0,
+        premiumPlan: 'free',
+        isVip: false,
+        isAuthor: true,
+        isVerifiedAuthor: false,
+        followers: [],
+        following: [],
+        library: [],
+        badges: [],
+        readingProgress: [],
+        stats: { storiesRead: 0, timeSpentReadingMinutes: 0, commentsWritten: 0, dailyStreak: 1, lastActiveDate: new Date().toISOString() },
+        customLists: [],
+        storiesCount: 1,
+        savedStories: [],
+        bookmarks: [],
+      };
+      setUsers((prev) => [author!, ...prev.filter((u) => u.id !== author!.id)]);
+      setCurrentUserId(newAuthorId);
+    }
 
     const now = new Date().toISOString().split('T')[0];
     let targetId = storyData.id;
 
     if (targetId && stories.some((s) => s.id === targetId)) {
-      // Update existing
+      // Update existing story
       const existingStory = stories.find((s) => s.id === targetId);
       const prevChapterCount = existingStory?.chapters?.length || 0;
       const newChapters = storyData.chapters || existingStory?.chapters || [];
@@ -1673,22 +1845,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newChapterIndex = newChapters.length - 1;
       const newChapterTitle = newChapters[newChapterIndex]?.title || `${newChapters.length}. Bölüm`;
 
+      const updatedStory = {
+        ...existingStory,
+        ...storyData,
+        updatedAt: now,
+      } as Story;
+
       setStories((prev) =>
         prev.map((s) => {
           if (s.id === targetId) {
-            const updated = { ...s, ...storyData, updatedAt: now } as Story;
-            saveStoryToFirebase(updated);
-            return updated;
+            return updatedStory;
           }
           return s;
         })
       );
+      saveStoryToFirebase(updatedStory);
 
       // Notify readers who have this story saved in their library
-      if (isNewChapterAdded && existingStory) {
+      if (isNewChapterAdded && existingStory && author) {
         const readersToNotify = users.filter(
           (u) =>
-            u.id !== currentUser.id &&
+            u.id !== author!.id &&
             (u.library?.some((item) => item.storyId === targetId) ||
              u.customLists?.some((list) => list.storyIds?.includes(targetId)))
         );
@@ -1696,10 +1873,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         readersToNotify.forEach((reader) => {
           sendNotification({
             userId: reader.id,
-            actorId: currentUser.id,
-            senderId: currentUser.id,
-            senderName: currentUser.name,
-            senderAvatar: currentUser.avatar,
+            actorId: author!.id,
+            senderId: author!.id,
+            senderName: author!.name,
+            senderAvatar: author!.avatar,
             type: 'new_chapter',
             title: '📖 Yeni Bölüm Yayınlandı!',
             message: `Kütüphanendeki "${existingStory.title}" adlı esere yeni bir bölüm eklendi: "${newChapterTitle}". Hemen oku!`,
@@ -1710,9 +1887,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         });
       }
+      return targetId;
     } else {
       // Create new story (UNLIMITED FOR ALL USERS)
-      targetId = 'story_' + Date.now();
+      targetId = targetId || ('story_' + Date.now());
       const newStory: Story = {
         id: targetId,
         title: storyData.title || 'İsimsiz Hikaye',
@@ -1720,10 +1898,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         coverUrl:
           storyData.coverUrl ||
           'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=800',
-        authorId: currentUser.id,
-        authorName: currentUser.name,
-        authorUsername: currentUser.username,
-        authorAvatar: currentUser.avatar,
+        authorId: author.id,
+        authorName: author.name,
+        authorUsername: author.username,
+        authorAvatar: author.avatar,
         category: (storyData.category as Category) || 'Romantik',
         tags: storyData.tags || ['Yeni'],
         visibility: (storyData.visibility as Visibility) || 'public',
@@ -1737,18 +1915,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedAt: now,
         readingTimeMinutes: storyData.chapters
           ? Math.ceil(
-              storyData.chapters.reduce((acc, c) => acc + c.content.length, 0) / 1000
+              storyData.chapters.reduce((acc, c) => acc + (c.content?.length || 0), 0) / 1000
             ) || 3
           : 3,
       };
 
-      setStories((prev) => [newStory, ...prev]);
+      setStories((prev) => [newStory, ...prev.filter((s) => s.id !== newStory.id)]);
       saveStoryToFirebase(newStory);
 
       // Increment user's story count
       setUsers((prev) =>
         prev.map((u) =>
-          u.id === currentUser.id
+          u.id === author!.id
             ? { ...u, storiesCount: (u.storiesCount || 0) + 1 }
             : u
         )
@@ -1756,25 +1934,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Notify followers of new story
       const authorFollowers = users.filter(
-        (u) => u.id !== currentUser.id && (u.following || []).includes(currentUser.id)
+        (u) => u.id !== author!.id && (u.following || []).includes(author!.id)
       );
       authorFollowers.forEach((follower) => {
         sendNotification({
           userId: follower.id,
-          actorId: currentUser.id,
-          senderId: currentUser.id,
-          senderName: currentUser.name,
-          senderAvatar: currentUser.avatar,
+          actorId: author!.id,
+          senderId: author!.id,
+          senderName: author!.name,
+          senderAvatar: author!.avatar,
           type: 'new_story',
           title: '✨ Takip Ettiğin Yazardan Yeni Hikaye!',
-          message: `${currentUser.name} (@${currentUser.username}) yeni bir hikaye yayınladı: "${newStory.title}". Hemen keşfet!`,
+          message: `${author!.name} (@${author!.username}) yeni bir hikaye yayınladı: "${newStory.title}". Hemen keşfet!`,
           storyId: targetId,
           targetStoryId: targetId,
         });
       });
-    }
 
-    return targetId;
+      return targetId;
+    }
   };
 
   const deleteStory = (storyId: string) => {

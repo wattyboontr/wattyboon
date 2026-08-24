@@ -124,8 +124,9 @@ export const ExploreView: React.FC = () => {
 
   // Filter public stories
   const availableStories = useMemo(() => {
-    return stories.filter((s) => {
-      const isVisible = s.visibility === 'public' || (currentUser && s.authorId === currentUser.id);
+    return (stories || []).filter((s) => {
+      if (!s) return false;
+      const isVisible = s.visibility !== 'private' || (currentUser && s.authorId === currentUser.id);
       return isVisible;
     });
   }, [stories, currentUser]);
@@ -134,9 +135,11 @@ export const ExploreView: React.FC = () => {
   const popularTags = useMemo(() => {
     const tagMap = new Map<string, number>();
     availableStories.forEach((s) => {
-      s.tags.forEach((t) => {
-        if (t && t.trim()) tagMap.set(t.trim(), (tagMap.get(t.trim()) || 0) + 1);
-      });
+      if (Array.isArray(s.tags)) {
+        s.tags.forEach((t) => {
+          if (t && t.trim()) tagMap.set(t.trim(), (tagMap.get(t.trim()) || 0) + 1);
+        });
+      }
     });
     return Array.from(tagMap.entries())
       .sort((a, b) => b[1] - a[1])
@@ -147,13 +150,15 @@ export const ExploreView: React.FC = () => {
   // Filtered stories calculation
   const filteredStories = useMemo(() => {
     return availableStories.filter((story) => {
+      const storyTags = Array.isArray(story.tags) ? story.tags : [];
+      
       // Query filter
       if (filters.query.trim()) {
         const q = filters.query.toLowerCase().trim();
-        const matchesTitle = story.title.toLowerCase().includes(q);
-        const matchesAuthor = story.authorName.toLowerCase().includes(q) || story.authorUsername.toLowerCase().includes(q);
-        const matchesSummary = story.summary.toLowerCase().includes(q);
-        const matchesTag = story.tags.some((t) => t.toLowerCase().includes(q));
+        const matchesTitle = (story.title || '').toLowerCase().includes(q);
+        const matchesAuthor = (story.authorName || '').toLowerCase().includes(q) || (story.authorUsername || '').toLowerCase().includes(q);
+        const matchesSummary = (story.summary || '').toLowerCase().includes(q);
+        const matchesTag = storyTags.some((t) => t.toLowerCase().includes(q));
         if (!matchesTitle && !matchesAuthor && !matchesSummary && !matchesTag) return false;
       }
 
@@ -170,7 +175,7 @@ export const ExploreView: React.FC = () => {
       // Tag filter
       if (filters.tag) {
         const targetTag = filters.tag.trim().toLowerCase();
-        const storyHasTag = story.tags.some(
+        const storyHasTag = storyTags.some(
           (t) => t.trim().toLowerCase() === targetTag || t.trim().toLowerCase().includes(targetTag)
         );
         if (!storyHasTag) return false;

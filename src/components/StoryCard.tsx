@@ -25,13 +25,13 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, layout = 'grid' }) 
   const [isCustomListModalOpen, setIsCustomListModalOpen] = useState(false);
 
   const isSaved = isStoryInLibrary(story.id);
-  const isLiked = currentUser ? story.likedBy.includes(currentUser.id) : false;
+  const isLiked = currentUser ? (Array.isArray(story.likedBy) && story.likedBy.includes(currentUser.id)) : false;
   const isBlurred = story.isNsfw && !isNsfwEnabled;
 
   const categoryRank = useMemo(() => {
     if (!stories || stories.length === 0) return null;
     const catStories = stories
-      .filter((s) => s.category === story.category && s.visibility === 'public')
+      .filter((s) => s && s.category === story.category && s.visibility !== 'private')
       .sort((a, b) => ((b.reads || 0) + (b.likes || 0) * 5) - ((a.reads || 0) + (a.likes || 0) * 5));
     const idx = catStories.findIndex((s) => s.id === story.id);
     return idx !== -1 ? idx + 1 : null;
@@ -219,15 +219,9 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, layout = 'grid' }) 
             <div className="flex items-center gap-2">
               <button 
                 onClick={() => openStoryDetail(story.id)}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-all text-[11px]"
+                className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-all text-[11px] shadow-sm flex items-center gap-1 cursor-pointer"
               >
-                Hikaye Özeti
-              </button>
-              <button 
-                onClick={() => openStoryReader(story.id)}
-                className="px-3 py-1.5 rounded-lg bg-purple-600 text-white font-semibold hover:bg-purple-700 transition-all text-[11px] shadow-sm flex items-center gap-1"
-              >
-                Oku <ArrowRight className="w-3 h-3" />
+                İncele & Özet <ArrowRight className="w-3 h-3" />
               </button>
             </div>
           </div>

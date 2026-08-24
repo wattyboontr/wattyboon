@@ -1,4 +1,23 @@
-# WattyBoon Robots.txt
+# WattyBoon Robots.txt - SEO & Search Engine Crawlers Optimization
+User-agent: Googlebot
+Allow: /
+Allow: /kesfet
+Allow: /kategoriler
+Allow: /forum
+Allow: /kutuphanem
+Allow: /sitemap
+
+User-agent: Googlebot-Image
+Allow: /
+Allow: /favicon*
+Allow: /apple-touch-icon*
+
+User-agent: Bingbot
+Allow: /
+Allow: /kesfet
+Allow: /kategoriler
+Allow: /forum
+
 User-agent: *
 Allow: /
 Disallow: /api/

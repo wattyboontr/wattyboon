@@ -27,6 +27,9 @@ export const Footer: React.FC<FooterProps> = ({ onOpenInfoModal }) => {
             >
               <WattyboonLogo className="text-2xl" />
             </div>
+            <p className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+              Hikaye Yaz, Oku ve Keşfet
+            </p>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
               Etkileşimli hikayeler, tutkulu yazarlar ve sürükleyici kurgular dünyası. Kendi hikayeni yaz veya binlerce kurguya adım at.
             </p>

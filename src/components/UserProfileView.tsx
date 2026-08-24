@@ -215,10 +215,12 @@ export const UserProfileView: React.FC = () => {
   }, [autoOpenProfileSettings, isSelf, setAutoOpenProfileSettings]);
 
   // Filter public stories or public+private if viewing own profile
-  const authorStories = stories.filter((s) => {
-    if (s.authorId !== author?.id) return false;
+  const authorStories = (stories || []).filter((s) => {
+    if (!s) return false;
+    const isAuthor = (author?.id && s.authorId === author.id) || (author?.username && s.authorUsername?.toLowerCase() === author.username.toLowerCase());
+    if (!isAuthor) return false;
     if (isSelf) return true;
-    return s.visibility === 'public';
+    return s.visibility !== 'private';
   });
 
   // Custom Reading Lists

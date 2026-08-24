@@ -37,7 +37,7 @@ export const SitemapView: React.FC = () => {
   ];
 
   const publicStories = useMemo(() => {
-    return (stories || []).filter((s) => s.visibility === 'public');
+    return (stories || []).filter((s) => s && s.visibility !== 'private');
   }, [stories]);
 
   const filteredStories = useMemo(() => {

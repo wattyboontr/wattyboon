@@ -1,6 +1,6 @@
 {
   "name": "WattyBoon",
-  "description": "WattyBoon - Hikaye okuma, yazma ve keşfetme platformu.",
+  "description": "WattyBoon - Türkiye'nin modern Türkçe hikaye, roman, kurgu paylaşım ve edebiyat platformu.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

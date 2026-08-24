@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "Story": {
+      "title": "Story",
+      "description": "Public story metadata accessible to all users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorUsername": { "type": "string" },
+        "authorAvatar": { "type": "string" },
+        "category": { "type": "string" },
+        "tags": { "type": "array" },
+        "visibility": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "title", "authorId"]
+    },
+    "Chapter": {
+      "title": "Chapter",
+      "description": "Full chapter text content restricted to authenticated members",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "content"]
+    }
+  },
+  "firestore": {
+    "/stories/{storyId}": {
+      "schema": "Story",
+      "description": "Public story metadata"
+    },
+    "/stories/{storyId}/chapters/{chapterId}": {
+      "schema": "Chapter",
+      "description": "Chapter full content restricted to authenticated users"
+    }
+  }
+}

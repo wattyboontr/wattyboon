@@ -62,7 +62,9 @@ export const LibraryView: React.FC = () => {
   const completedStories = stories.filter((s) => userLibraryMap.get(s.id)?.status === 'completed');
 
   // Author's own public and private stories
-  const myStories = stories.filter((s) => s.authorId === currentUser.id);
+  const myStories = stories.filter(
+    (s) => s && (s.authorId === currentUser.id || (currentUser.username && s.authorUsername?.toLowerCase() === currentUser.username?.toLowerCase()))
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-fade-in pb-24 md:pb-12">

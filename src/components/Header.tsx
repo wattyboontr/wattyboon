@@ -67,14 +67,17 @@ export const Header: React.FC<HeaderProps> = ({ onOpenInfoModal }) => {
     <header className="sticky top-0 z-40 w-full bg-white/90 dark:bg-slate-950/90 backdrop-blur-md border-b border-purple-100 dark:border-purple-900/30 transition-colors duration-200 pt-[env(safe-area-inset-top,0px)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         
-        {/* Brand Logo */}
+        {/* Brand Logo & Slogan */}
         <div 
           onClick={() => {
             setActiveView('home');
           }}
-          className="flex items-center cursor-pointer group select-none hover:opacity-90 transition-opacity"
+          className="flex items-center gap-2.5 cursor-pointer group select-none hover:opacity-90 transition-opacity"
         >
           <WattyboonLogo className="text-2xl sm:text-3xl" />
+          <span className="hidden lg:inline-flex items-center px-2 py-0.5 rounded-md bg-purple-100/80 dark:bg-purple-950/70 border border-purple-200 dark:border-purple-800/60 text-[11px] font-semibold text-purple-700 dark:text-purple-300">
+            Hikaye Yaz, Oku ve Keşfet
+          </span>
         </div>
 
         {/* Center Nav Links (Desktop) */}

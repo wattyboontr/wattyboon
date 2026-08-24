@@ -315,6 +315,7 @@ export const ALL_CATEGORIES_DATA: CategoryInfo[] = [
 export const CategoriesView: React.FC = () => {
   const { 
     stories, 
+    currentUser,
     selectedCategoryFilter, 
     setSelectedCategoryFilter,
     selectedTagFilter,
@@ -342,8 +343,12 @@ export const CategoriesView: React.FC = () => {
   // Stories for selected category or all stories
   const categoryStories = useMemo(() => {
     if (!selectedCategory) return [];
-    return stories.filter((s) => s.visibility === 'public' && s.category === selectedCategory);
-  }, [stories, selectedCategory]);
+    return (stories || []).filter((s) => {
+      if (!s) return false;
+      const isVisible = s.visibility !== 'private' || (currentUser && s.authorId === currentUser.id);
+      return isVisible && s.category === selectedCategory;
+    });
+  }, [stories, selectedCategory, currentUser]);
 
   const handleSelectCategory = (catName: Category) => {
     if (selectedCategory === catName) {
@@ -356,7 +361,11 @@ export const CategoriesView: React.FC = () => {
   };
 
   const getStoryCountForCategory = (categoryName: string) => {
-    return stories.filter((s) => s.visibility === 'public' && s.category === categoryName).length;
+    return (stories || []).filter((s) => {
+      if (!s) return false;
+      const isVisible = s.visibility !== 'private' || (currentUser && s.authorId === currentUser.id);
+      return isVisible && s.category === categoryName;
+    }).length;
   };
 
   return (

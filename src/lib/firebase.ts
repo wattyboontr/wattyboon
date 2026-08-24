@@ -21,7 +21,8 @@ import {
   deleteDoc, 
   query, 
   where,
-  writeBatch
+  writeBatch,
+  onSnapshot
 } from 'firebase/firestore';
 import { 
   getDatabase, 
@@ -30,7 +31,8 @@ import {
   get, 
   child, 
   remove,
-  update
+  update,
+  onValue
 } from 'firebase/database';
 import { Story, User, ForumTopic, ParagraphComment, Comment, AppNotification, DirectMessage, StoryReport } from '../types';
 
@@ -49,7 +51,7 @@ export const firebaseConfig = {
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const rtdb = getDatabase(app);
+export const rtdb = getDatabase(app, firebaseConfig.databaseURL);
 
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
@@ -471,44 +473,161 @@ export const authLogout = firebaseLogoutUser;
 
 // 1. STORIES (Hikayeler)
 export async function fetchStoriesFromFirebase(): Promise<Story[]> {
-  try {
-    const snap = await getDocs(collection(db, 'stories'));
-    const stories: Story[] = [];
-    snap.forEach((d) => {
-      stories.push(d.data() as Story);
-    });
-    if (stories.length > 0) return stories;
-  } catch (err) {
-    console.warn('Firestore fetch stories notice:', err);
-  }
+  const storiesMap = new Map<string, Story>();
 
-  // Fallback to RTDB
-  try {
-    const snap = await get(child(ref(rtdb), 'stories'));
-    if (snap.exists()) {
-      const val = snap.val();
-      return Object.values(val) as Story[];
+  // 1. Fetch from Firestore collections
+  const firestoreCollections = ['stories', 'wattyboon_stories', 'hikayeler', 'books', 'user_stories'];
+  for (const colName of firestoreCollections) {
+    try {
+      const snap = await getDocs(collection(db, colName));
+      snap.forEach((d) => {
+        const data = d.data();
+        if (data && typeof data === 'object') {
+          const id = data.id || d.id;
+          if (id) {
+            storiesMap.set(id, { ...data, id } as Story);
+          }
+        }
+      });
+    } catch (err) {
+      // ignore
     }
-  } catch (err) {
-    console.warn('RTDB fetch stories notice:', err);
   }
 
-  return [];
+  // 2. Fetch from Realtime Database as complementary / fallback source
+  const rtdbPaths = ['stories', 'wattyboon_stories', 'wattyboon/stories', 'hikayeler', 'books'];
+  for (const p of rtdbPaths) {
+    try {
+      const snap = await get(child(ref(rtdb), p));
+      if (snap.exists()) {
+        const val = snap.val();
+        if (Array.isArray(val)) {
+          val.forEach((item, idx) => {
+            if (item && typeof item === 'object') {
+              const id = item.id || `rtdb_${p.replace(/\//g, '_')}_${idx}`;
+              if (!storiesMap.has(id)) {
+                storiesMap.set(id, { ...item, id } as Story);
+              }
+            }
+          });
+        } else if (val && typeof val === 'object') {
+          Object.entries(val).forEach(([key, item]: [string, any]) => {
+            if (item && typeof item === 'object') {
+              const id = item.id || key;
+              if (!storiesMap.has(id)) {
+                storiesMap.set(id, { ...item, id } as Story);
+              }
+            }
+          });
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  return Array.from(storiesMap.values());
+}
+
+/**
+ * Real-time listener for Firebase stories (Firestore + Realtime Database)
+ */
+export function subscribeToStoriesFromFirebase(callback: (stories: Story[]) => void): () => void {
+  const firestoreStories = new Map<string, Story>();
+  const rtdbStories = new Map<string, Story>();
+
+  const emitMerged = () => {
+    const combined = new Map<string, Story>();
+    firestoreStories.forEach((s, id) => combined.set(id, s));
+    rtdbStories.forEach((s, id) => {
+      if (!combined.has(id)) {
+        combined.set(id, s);
+      }
+    });
+    callback(Array.from(combined.values()));
+  };
+
+  // Firestore onSnapshot
+  let unsubFirestore = () => {};
+  try {
+    unsubFirestore = onSnapshot(collection(db, 'stories'), (snap) => {
+      firestoreStories.clear();
+      snap.forEach((d) => {
+        const data = d.data();
+        if (data && typeof data === 'object') {
+          const id = data.id || d.id;
+          if (id) {
+            firestoreStories.set(id, { ...data, id } as Story);
+          }
+        }
+      });
+      emitMerged();
+    }, (err) => {
+      console.warn('Firestore story subscription notice:', err);
+    });
+  } catch (err) {
+    console.warn('Firestore onSnapshot init notice:', err);
+  }
+
+  // RTDB onValue
+  let unsubRtdb = () => {};
+  try {
+    const storiesRef = ref(rtdb, 'stories');
+    unsubRtdb = onValue(storiesRef, (snap) => {
+      rtdbStories.clear();
+      if (snap.exists()) {
+        const val = snap.val();
+        if (Array.isArray(val)) {
+          val.forEach((item, idx) => {
+            if (item && typeof item === 'object') {
+              const id = item.id || `rtdb_story_${idx}`;
+              rtdbStories.set(id, { ...item, id } as Story);
+            }
+          });
+        } else if (val && typeof val === 'object') {
+          Object.entries(val).forEach(([key, item]: [string, any]) => {
+            if (item && typeof item === 'object') {
+              const id = item.id || key;
+              rtdbStories.set(id, { ...item, id } as Story);
+            }
+          });
+        }
+      }
+      emitMerged();
+    }, (err) => {
+      console.warn('RTDB story onValue notice:', err);
+    });
+  } catch (err) {
+    console.warn('RTDB onValue init notice:', err);
+  }
+
+  return () => {
+    try { unsubFirestore(); } catch {}
+    try { unsubRtdb(); } catch {}
+  };
 }
 
 export async function saveStoryToFirebase(story: Story): Promise<void> {
   if (!story || !story.id) return;
+  // Save to Firestore collections
   try {
     await setDoc(doc(db, 'stories', story.id), story, { merge: true });
   } catch (err) {
     console.warn('Firestore save story notice:', err);
   }
+  try {
+    await setDoc(doc(db, 'wattyboon_stories', story.id), story, { merge: true });
+  } catch (err) {}
 
+  // Save to RTDB
   try {
     await set(ref(rtdb, `stories/${story.id}`), story);
   } catch (err) {
     console.warn('RTDB save story notice:', err);
   }
+  try {
+    await set(ref(rtdb, `wattyboon_stories/${story.id}`), story);
+  } catch (err) {}
 }
 
 export async function deleteStoryFromFirebase(storyId: string): Promise<void> {
@@ -535,13 +654,17 @@ export async function clearAllStoriesFromFirebase(): Promise<void> {
 
 // 2. USERS (Üyeler & Profiller)
 export async function fetchUsersFromFirebase(): Promise<User[]> {
+  const usersMap = new Map<string, User>();
+
   try {
     const snap = await getDocs(collection(db, 'users'));
-    const users: User[] = [];
     snap.forEach((d) => {
-      users.push(d.data() as User);
+      const data = d.data();
+      if (data && typeof data === 'object') {
+        const id = data.id || d.id;
+        if (id) usersMap.set(id, { ...data, id } as User);
+      }
     });
-    if (users.length > 0) return users;
   } catch (err) {
     console.warn('Firestore fetch users notice:', err);
   }
@@ -549,11 +672,21 @@ export async function fetchUsersFromFirebase(): Promise<User[]> {
   try {
     const snap = await get(child(ref(rtdb), 'users'));
     if (snap.exists()) {
-      return Object.values(snap.val()) as User[];
+      const val = snap.val();
+      if (val && typeof val === 'object') {
+        Object.entries(val).forEach(([key, item]: [string, any]) => {
+          if (item && typeof item === 'object') {
+            const id = item.id || key;
+            if (!usersMap.has(id)) {
+              usersMap.set(id, { ...item, id } as User);
+            }
+          }
+        });
+      }
     }
   } catch (err) {}
 
-  return [];
+  return Array.from(usersMap.values());
 }
 
 export async function saveUserToFirebase(user: User): Promise<void> {
@@ -578,23 +711,37 @@ export async function deleteUserFromFirebase(userId: string): Promise<void> {
 
 // 3. FORUM TOPICS & DISCUSSIONS (Forumlar)
 export async function fetchForumTopicsFromFirebase(): Promise<ForumTopic[]> {
+  const map = new Map<string, ForumTopic>();
+
   try {
     const snap = await getDocs(collection(db, 'forum_topics'));
-    const topics: ForumTopic[] = [];
     snap.forEach((d) => {
-      topics.push(d.data() as ForumTopic);
+      const data = d.data();
+      if (data && typeof data === 'object') {
+        const id = data.id || d.id;
+        if (id) map.set(id, { ...data, id } as ForumTopic);
+      }
     });
-    if (topics.length > 0) return topics;
   } catch (e) {}
 
   try {
     const snap = await get(child(ref(rtdb), 'forum_topics'));
     if (snap.exists()) {
-      return Object.values(snap.val()) as ForumTopic[];
+      const val = snap.val();
+      if (val && typeof val === 'object') {
+        Object.entries(val).forEach(([key, item]: [string, any]) => {
+          if (item && typeof item === 'object') {
+            const id = item.id || key;
+            if (!map.has(id)) {
+              map.set(id, { ...item, id } as ForumTopic);
+            }
+          }
+        });
+      }
     }
   } catch (e) {}
 
-  return [];
+  return Array.from(map.values());
 }
 
 export async function saveForumTopicToFirebase(topic: ForumTopic): Promise<void> {
@@ -619,23 +766,37 @@ export async function deleteForumTopicFromFirebase(topicId: string): Promise<voi
 
 // 4. PARAGRAPH COMMENTS (Paragraf / Cümle İçi Yorumlar)
 export async function fetchParagraphCommentsFromFirebase(): Promise<ParagraphComment[]> {
+  const map = new Map<string, ParagraphComment>();
+
   try {
     const snap = await getDocs(collection(db, 'paragraph_comments'));
-    const list: ParagraphComment[] = [];
     snap.forEach((d) => {
-      list.push(d.data() as ParagraphComment);
+      const data = d.data();
+      if (data && typeof data === 'object') {
+        const id = data.id || d.id;
+        if (id) map.set(id, { ...data, id } as ParagraphComment);
+      }
     });
-    if (list.length > 0) return list;
   } catch (e) {}
 
   try {
     const snap = await get(child(ref(rtdb), 'paragraph_comments'));
     if (snap.exists()) {
-      return Object.values(snap.val()) as ParagraphComment[];
+      const val = snap.val();
+      if (val && typeof val === 'object') {
+        Object.entries(val).forEach(([key, item]: [string, any]) => {
+          if (item && typeof item === 'object') {
+            const id = item.id || key;
+            if (!map.has(id)) {
+              map.set(id, { ...item, id } as ParagraphComment);
+            }
+          }
+        });
+      }
     }
   } catch (e) {}
 
-  return [];
+  return Array.from(map.values());
 }
 
 export async function saveParagraphCommentToFirebase(comment: ParagraphComment): Promise<void> {
@@ -660,23 +821,37 @@ export async function deleteParagraphCommentFromFirebase(commentId: string): Pro
 
 // 5. CHAPTER COMMENTS (Bölüm Yorumları)
 export async function fetchCommentsFromFirebase(): Promise<Comment[]> {
+  const map = new Map<string, Comment>();
+
   try {
     const snap = await getDocs(collection(db, 'comments'));
-    const list: Comment[] = [];
     snap.forEach((d) => {
-      list.push(d.data() as Comment);
+      const data = d.data();
+      if (data && typeof data === 'object') {
+        const id = data.id || d.id;
+        if (id) map.set(id, { ...data, id } as Comment);
+      }
     });
-    if (list.length > 0) return list;
   } catch (e) {}
 
   try {
     const snap = await get(child(ref(rtdb), 'comments'));
     if (snap.exists()) {
-      return Object.values(snap.val()) as Comment[];
+      const val = snap.val();
+      if (val && typeof val === 'object') {
+        Object.entries(val).forEach(([key, item]: [string, any]) => {
+          if (item && typeof item === 'object') {
+            const id = item.id || key;
+            if (!map.has(id)) {
+              map.set(id, { ...item, id } as Comment);
+            }
+          }
+        });
+      }
     }
   } catch (e) {}
 
-  return [];
+  return Array.from(map.values());
 }
 
 export async function saveCommentToFirebase(comment: Comment): Promise<void> {
@@ -701,23 +876,37 @@ export async function deleteCommentFromFirebase(commentId: string): Promise<void
 
 // 6. NOTIFICATIONS (Bildirimler)
 export async function fetchNotificationsFromFirebase(): Promise<AppNotification[]> {
+  const map = new Map<string, AppNotification>();
+
   try {
     const snap = await getDocs(collection(db, 'notifications'));
-    const list: AppNotification[] = [];
     snap.forEach((d) => {
-      list.push(d.data() as AppNotification);
+      const data = d.data();
+      if (data && typeof data === 'object') {
+        const id = data.id || d.id;
+        if (id) map.set(id, { ...data, id } as AppNotification);
+      }
     });
-    if (list.length > 0) return list;
   } catch (e) {}
 
   try {
     const snap = await get(child(ref(rtdb), 'notifications'));
     if (snap.exists()) {
-      return Object.values(snap.val()) as AppNotification[];
+      const val = snap.val();
+      if (val && typeof val === 'object') {
+        Object.entries(val).forEach(([key, item]: [string, any]) => {
+          if (item && typeof item === 'object') {
+            const id = item.id || key;
+            if (!map.has(id)) {
+              map.set(id, { ...item, id } as AppNotification);
+            }
+          }
+        });
+      }
     }
   } catch (e) {}
 
-  return [];
+  return Array.from(map.values());
 }
 
 export async function saveNotificationToFirebase(notif: AppNotification): Promise<void> {
@@ -732,23 +921,37 @@ export async function saveNotificationToFirebase(notif: AppNotification): Promis
 
 // 7. DIRECT MESSAGES (Özel Mesajlar)
 export async function fetchMessagesFromFirebase(): Promise<DirectMessage[]> {
+  const map = new Map<string, DirectMessage>();
+
   try {
     const snap = await getDocs(collection(db, 'messages'));
-    const list: DirectMessage[] = [];
     snap.forEach((d) => {
-      list.push(d.data() as DirectMessage);
+      const data = d.data();
+      if (data && typeof data === 'object') {
+        const id = data.id || d.id;
+        if (id) map.set(id, { ...data, id } as DirectMessage);
+      }
     });
-    if (list.length > 0) return list;
   } catch (e) {}
 
   try {
     const snap = await get(child(ref(rtdb), 'messages'));
     if (snap.exists()) {
-      return Object.values(snap.val()) as DirectMessage[];
+      const val = snap.val();
+      if (val && typeof val === 'object') {
+        Object.entries(val).forEach(([key, item]: [string, any]) => {
+          if (item && typeof item === 'object') {
+            const id = item.id || key;
+            if (!map.has(id)) {
+              map.set(id, { ...item, id } as DirectMessage);
+            }
+          }
+        });
+      }
     }
   } catch (e) {}
 
-  return [];
+  return Array.from(map.values());
 }
 
 export async function saveMessageToFirebase(msg: DirectMessage): Promise<void> {
@@ -763,23 +966,37 @@ export async function saveMessageToFirebase(msg: DirectMessage): Promise<void> {
 
 // 8. REPORTS & TICKETS (Şikayetler & Moderasyon)
 export async function fetchReportsFromFirebase(): Promise<StoryReport[]> {
+  const map = new Map<string, StoryReport>();
+
   try {
     const snap = await getDocs(collection(db, 'reports'));
-    const list: StoryReport[] = [];
     snap.forEach((d) => {
-      list.push(d.data() as StoryReport);
+      const data = d.data();
+      if (data && typeof data === 'object') {
+        const id = data.id || d.id;
+        if (id) map.set(id, { ...data, id } as StoryReport);
+      }
     });
-    if (list.length > 0) return list;
   } catch (e) {}
 
   try {
     const snap = await get(child(ref(rtdb), 'reports'));
     if (snap.exists()) {
-      return Object.values(snap.val()) as StoryReport[];
+      const val = snap.val();
+      if (val && typeof val === 'object') {
+        Object.entries(val).forEach(([key, item]: [string, any]) => {
+          if (item && typeof item === 'object') {
+            const id = item.id || key;
+            if (!map.has(id)) {
+              map.set(id, { ...item, id } as StoryReport);
+            }
+          }
+        });
+      }
     }
   } catch (e) {}
 
-  return [];
+  return Array.from(map.values());
 }
 
 export async function saveReportToFirebase(report: StoryReport): Promise<void> {
