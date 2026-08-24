@@ -317,10 +317,10 @@ export const StoryDetailView: React.FC = () => {
 
             {/* Report Button for Non-Author */}
             {!isAuthor && (
-              <div className="pt-2">
+              <div className="pt-1">
                 <button
                   onClick={() => setIsReportModalOpen(true)}
-                  className="text-xs text-rose-500 hover:text-rose-600 font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  className="text-[11px] text-slate-400 hover:text-rose-500 font-medium flex items-center gap-1 transition-colors cursor-pointer"
                 >
                   <ShieldAlert className="w-3.5 h-3.5" /> Şikayet veya Telif Bildir
                 </button>
@@ -331,6 +331,63 @@ export const StoryDetailView: React.FC = () => {
 
         </div>
       </section>
+
+      {/* 📖 PROMINENT "OKUMAYA BAŞLA" ACTION BANNER (Right Above Özet & Bölümler Tabs) */}
+      <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-purple-900/10 via-purple-600/10 to-indigo-900/10 dark:from-purple-950/60 dark:to-indigo-950/60 border border-purple-500/20 dark:border-purple-500/30 shadow-lg shadow-purple-900/5 dark:shadow-purple-950/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5 w-full sm:w-auto">
+          <div className="w-11 h-11 rounded-2xl bg-purple-600/20 dark:bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0">
+            <BookOpen className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white leading-tight">
+              {hasReadingHistory ? 'Kaldığın Yerden Devam Et' : 'Hikayeye Başla'}
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-purple-200/70 font-medium mt-0.5">
+              {hasReadingHistory 
+                ? `${resumeChapterTitle} kalınan bölüm` 
+                : `${story.chapters.length} Bölüm • Keyifli Okumalar`}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <button
+            onClick={() => openStoryReader(story.id, resumeChapterIndex)}
+            className="flex-1 sm:flex-initial px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs sm:text-sm shadow-md shadow-purple-500/25 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>
+              {hasReadingHistory
+                ? `Devam Et (${resumeChapterTitle})`
+                : 'Okumaya Başla'}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setIsCustomListModalOpen(true)}
+            className={`p-3 rounded-2xl border font-bold text-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center ${
+              isSaved
+                ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-purple-400'
+            }`}
+            title="Kütüphaneye / Listeye Ekle"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => toggleLikeStory(story.id)}
+            className={`p-3 rounded-2xl border font-bold text-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center ${
+              isLiked
+                ? 'bg-rose-500 text-white border-rose-500 shadow-sm'
+                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-rose-400'
+            }`}
+            title="Hikayeyi Beğen"
+          >
+            <Heart className={`w-4 h-4 ${isLiked ? 'fill-current text-white' : ''}`} />
+          </button>
+        </div>
+      </div>
 
       {/* Main Tab Bar: Özet (Summary) vs Bölümler (Chapters) */}
       <div className="flex items-center border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-2xl p-1 shadow-xs">
@@ -677,52 +734,6 @@ export const StoryDetailView: React.FC = () => {
       <section className="pt-2">
         <StoryCommentsSection storyId={story.id} chapterIndex={0} />
       </section>
-
-      {/* FIXED FLOATING BOTTOM ACTION BAR */}
-      <div className="fixed bottom-16 sm:bottom-6 left-0 right-0 z-30 px-4 max-w-lg mx-auto pointer-events-none">
-        <div className="bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-xl border border-slate-800 shadow-2xl rounded-2xl p-2.5 flex items-center gap-2 pointer-events-auto">
-          
-          {/* Main Action Button */}
-          <button
-            onClick={() => openStoryReader(story.id, resumeChapterIndex)}
-            className="flex-1 py-3 px-5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold text-xs shadow-lg shadow-purple-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <BookOpen className="w-4 h-4" />
-            <span>
-              {hasReadingHistory
-                ? `Kaldığın Yerden Oku (${resumeChapterTitle})`
-                : 'Okumaya Başla'}
-            </span>
-          </button>
-
-          {/* Library / Custom List Circle Plus Button */}
-          <button
-            onClick={() => setIsCustomListModalOpen(true)}
-            className={`p-3 rounded-xl border font-bold text-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center ${
-              isSaved
-                ? 'bg-purple-600 text-white border-purple-600 shadow-md'
-                : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-purple-400'
-            }`}
-            title="Kütüphaneye / Listeye Ekle"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-
-          {/* Toggle Like Circle Button */}
-          <button
-            onClick={() => toggleLikeStory(story.id)}
-            className={`p-3 rounded-xl border font-bold text-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center ${
-              isLiked
-                ? 'bg-rose-500 text-white border-rose-500 shadow-md'
-                : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-rose-400'
-            }`}
-            title="Hikayeyi Beğen"
-          >
-            <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
-          </button>
-
-        </div>
-      </div>
 
       {/* Modals */}
       <AddToCustomListModal
