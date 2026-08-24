@@ -19,6 +19,7 @@ export const AuthModal: React.FC = () => {
   const { 
     isAuthModalOpen, 
     setIsAuthModalOpen, 
+    authModalTab,
     login, 
     register, 
     loginWithGoogle,
@@ -27,6 +28,12 @@ export const AuthModal: React.FC = () => {
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'login' | 'register' | 'forgot'>('login');
+
+  React.useEffect(() => {
+    if (isAuthModalOpen && authModalTab) {
+      setActiveTab(authModalTab);
+    }
+  }, [isAuthModalOpen, authModalTab]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');

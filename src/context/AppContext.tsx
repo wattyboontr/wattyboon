@@ -234,6 +234,8 @@ interface AppContextType {
   // Modals & Settings Auto-Open
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (open: boolean) => void;
+  authModalTab: 'login' | 'register' | 'forgot';
+  openAuthModal: (tab?: 'login' | 'register' | 'forgot') => void;
   autoOpenProfileSettings: boolean;
   setAutoOpenProfileSettings: (open: boolean) => void;
 }
@@ -595,25 +597,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setStories((prev) => {
         const map = new Map<string, Story>();
 
-        if (normalizedFb.length > 0) {
-          // 1. Add all stories from Firebase
-          normalizedFb.forEach((s) => map.set(s.id, s));
-          // 2. Keep any newly created local stories that haven't synced yet
-          prev.forEach((s) => {
-            if (s && !map.has(s.id)) {
+        // 1. Add all stories from Firebase
+        normalizedFb.forEach((s) => map.set(s.id, s));
+
+        // 2. Keep any newly created local stories that were added in current session
+        prev.forEach((s) => {
+          if (s && s.id && !s.id.startsWith('story_gecenin_') && !s.id.startsWith('story_yildizlarin_') && !s.id.startsWith('story_sonbahar_')) {
+            if (!map.has(s.id) && normalizedFb.length === 0) {
               map.set(s.id, normalizeStory(s));
             }
-          });
-        } else {
-          // Firebase is empty: keep current stories or fallback to INITIAL_STORIES
-          const baseList = prev.length > 0 ? prev : INITIAL_STORIES;
-          baseList.forEach((s) => {
-            const norm = normalizeStory(s);
-            map.set(norm.id, norm);
-            // Seed to Firebase if database is empty
-            saveStoryToFirebase(norm).catch(() => {});
-          });
-        }
+          }
+        });
 
         return Array.from(map.values());
       });
@@ -1168,7 +1162,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeAuthorId, setActiveAuthorId] = useState<string | null>(initialRoute.authorId);
   const [editingStoryId, setEditingStoryId] = useState<string | null>(initialRoute.editStoryId);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authModalTab, setAuthModalTab] = useState<'login' | 'register' | 'forgot'>('login');
   const [autoOpenProfileSettings, setAutoOpenProfileSettings] = useState<boolean>(false);
+
+  const openAuthModal = (tab: 'login' | 'register' | 'forgot' = 'login') => {
+    setAuthModalTab(tab);
+    setIsAuthModalOpen(true);
+  };
 
   // Helper to generate dynamic clean URL paths and page document title
   const getUrlAndTitle = (
@@ -3149,6 +3149,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         isAuthModalOpen,
         setIsAuthModalOpen,
+        authModalTab,
+        openAuthModal,
         autoOpenProfileSettings,
         setAutoOpenProfileSettings,
       }}

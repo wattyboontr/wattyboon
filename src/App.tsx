@@ -12,6 +12,7 @@ import { UserProfileView } from './components/UserProfileView';
 import { NotificationDrawer } from './components/NotificationDrawer';
 import { StoryDetailView } from './components/StoryDetailView';
 import { AuthModal } from './components/AuthModal';
+import { WelcomeLanding } from './components/WelcomeLanding';
 import { MessagesModal } from './components/MessagesModal';
 import { InfoModal, InfoTabType } from './components/InfoModal';
 import { ForumView } from './components/ForumView';
@@ -22,10 +23,30 @@ import { Footer } from './components/Footer';
 import { ShieldAlert } from 'lucide-react';
 
 const AppContent: React.FC = () => {
-  const { activeView } = useApp();
+  const { activeView, currentUser } = useApp();
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [infoModalTab, setInfoModalTab] = useState<InfoTabType>('about');
   const [copyWarning, setCopyWarning] = useState<string | null>(null);
+
+  const openInfoModal = (tab: InfoTabType) => {
+    setInfoModalTab(tab);
+    setIsInfoModalOpen(true);
+  };
+
+  // Unauthenticated Welcome Landing Gate: Guests must sign in to browse/read stories
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans select-none relative">
+        <WelcomeLanding />
+        <AuthModal />
+        <InfoModal 
+          isOpen={isInfoModalOpen} 
+          onClose={() => setIsInfoModalOpen(false)} 
+          initialTab={infoModalTab} 
+        />
+      </div>
+    );
+  }
 
   // Global Copy Protection & Content Security
   useEffect(() => {
@@ -104,13 +125,8 @@ const AppContent: React.FC = () => {
     }
   }, [copyWarning]);
 
-  const openInfoModal = (tab: InfoTabType) => {
-    setInfoModalTab(tab);
-    setIsInfoModalOpen(true);
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200 select-none">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200 select-none relative">
       {/* Copy Protection Security Notification Toast */}
       {copyWarning && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92%] p-3.5 rounded-2xl bg-slate-900/95 text-white shadow-2xl border border-purple-500/50 backdrop-blur-md flex items-center gap-3 animate-bounce">
@@ -123,7 +139,7 @@ const AppContent: React.FC = () => {
 
       <Header onOpenInfoModal={openInfoModal} />
 
-      <main className="flex-1">
+      <main className="flex-1 w-full max-w-full overflow-x-hidden pb-24 md:pb-8">
         {activeView === 'home' && <HomeView />}
         {activeView === 'explore' && <ExploreView />}
         {activeView === 'categories' && <CategoriesView />}

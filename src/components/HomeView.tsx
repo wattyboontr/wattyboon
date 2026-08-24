@@ -383,26 +383,143 @@ export const HomeView: React.FC = () => {
         </button>
       </section>
 
-      {/* 2. Sizin İçin Önerilen Hikayeler (Recommended Stories) */}
-      {recommendedStories.length > 0 && (
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-              Sizin İçin Önerilen Hikayeler
-            </h2>
-            <span className="text-xs font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1">
-              <TrendingUp className="w-3.5 h-3.5" /> En Çok Sevilen Eserler
-            </span>
-          </div>
+      {/* 2. Sizin İçin Önerildi (Asymmetric Grid Layout) */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl sm:text-3xl font-display font-black text-slate-900 dark:text-white tracking-tight">
+            Sizin için önerildi
+          </h2>
+          <button
+            onClick={() => setActiveView('explore')}
+            className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            Tümünü Gör <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
-            {recommendedStories.map((story) => (
-              <StoryCard key={`home_rec_${story.id}`} story={story} />
-            ))}
+        {recommendedStories.length === 0 ? (
+          <div className="p-8 sm:p-12 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-4 shadow-sm">
+            <div className="w-16 h-16 mx-auto rounded-3xl bg-purple-50 dark:bg-purple-950/80 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+              <Sparkles className="w-8 h-8" />
+            </div>
+            <div className="space-y-1.5 max-w-md mx-auto">
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Henüz Yayımlanmış Hikaye Bulunmuyor</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Platformumuz sıfırlandı! İlk hikayeyi kaleme alıp milyonlarca okurla buluşturan ilk yazar sen ol.
+              </p>
+            </div>
+            <button
+              onClick={() => openStoryEditor(null)}
+              className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-md shadow-purple-500/20 transition-all inline-flex items-center gap-2 cursor-pointer"
+            >
+              <PenTool className="w-4 h-4" /> İlk Hikayeni Yaz
+            </button>
           </div>
-        </section>
-      )}
+        ) : (
+          (() => {
+            const mainHeroStory = recommendedStories[0];
+            const gridStories = recommendedStories.slice(1, 5);
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 sm:gap-4">
+                
+                {/* Left Main Large Hero Card */}
+                {mainHeroStory && (
+                  <div 
+                    onClick={() => openStoryDetail(mainHeroStory.id)}
+                    className={`relative group cursor-pointer overflow-hidden rounded-2xl sm:rounded-3xl shadow-xl ring-1 ring-slate-200 dark:ring-slate-800 bg-slate-900 min-h-[380px] sm:min-h-[460px] md:min-h-[520px] flex flex-col justify-end transition-all duration-300 hover:ring-purple-500/50 hover:shadow-2xl hover:shadow-purple-500/10 ${
+                      gridStories.length > 0 ? 'md:col-span-5 lg:col-span-5' : 'md:col-span-12'
+                    }`}
+                  >
+                    <img 
+                      src={mainHeroStory.coverUrl} 
+                      alt={mainHeroStory.title} 
+                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 brightness-95 group-hover:brightness-100" 
+                    />
+
+                    {/* Gradient Overlay for Readable Text */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none" />
+
+                    {/* Category / Badge */}
+                    <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-10 flex items-center gap-2">
+                      <span className="px-3 py-1 rounded-full bg-purple-600/90 backdrop-blur-md text-white text-[11px] font-black tracking-wide shadow-md">
+                        ✨ ÖNE ÇIKAN ÖNERİ
+                      </span>
+                    </div>
+
+                    {/* Bottom Info Content */}
+                    <div className="relative z-10 p-5 sm:p-6 space-y-2 text-white">
+                      <span className="text-[11px] font-bold text-purple-300 uppercase tracking-widest block">
+                        {mainHeroStory.category}
+                      </span>
+                      <h3 className="text-xl sm:text-2xl font-display font-black leading-tight tracking-tight drop-shadow-md group-hover:text-purple-300 transition-colors">
+                        {mainHeroStory.title}
+                      </h3>
+                      <p className="text-xs text-slate-300 line-clamp-2 font-normal leading-relaxed">
+                        {mainHeroStory.summary}
+                      </p>
+                      <div className="pt-2 flex items-center justify-between text-xs font-semibold text-slate-300 border-t border-white/15">
+                        <span className="flex items-center gap-1.5 text-white font-bold">
+                          <PenTool className="w-3.5 h-3.5 text-purple-400" />
+                          {mainHeroStory.authorName}
+                        </span>
+                        <span className="flex items-center gap-2 text-[11px]">
+                          <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5 text-purple-400" /> {mainHeroStory.reads}</span>
+                          <span>•</span>
+                          <span className="flex items-center gap-1"><Heart className="w-3.5 h-3.5 text-rose-400" /> {mainHeroStory.likes}</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Right 2x2 Grid for Remaining Recommended Stories */}
+                {gridStories.length > 0 && (
+                  <div className="md:col-span-7 lg:col-span-7 grid grid-cols-2 gap-3 sm:gap-4">
+                    {gridStories.map((story) => (
+                      <div
+                        key={`rec_grid_${story.id}`}
+                        onClick={() => openStoryDetail(story.id)}
+                        className="relative group cursor-pointer overflow-hidden rounded-2xl sm:rounded-3xl shadow-lg ring-1 ring-slate-200 dark:ring-slate-800 bg-slate-900 aspect-[3/4] flex flex-col justify-end transition-all duration-300 hover:ring-purple-500/50 hover:shadow-xl hover:shadow-purple-500/10"
+                      >
+                        <img 
+                          src={story.coverUrl} 
+                          alt={story.title} 
+                          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 brightness-90 group-hover:brightness-100" 
+                        />
+
+                        {/* Gradient Overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent pointer-events-none" />
+
+                        {/* Top Category Badge */}
+                        <div className="absolute top-2.5 left-2.5 z-10">
+                          <span className="px-2.5 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white text-[10px] font-extrabold tracking-tight border border-white/10">
+                            {story.category}
+                          </span>
+                        </div>
+
+                        {/* Title & Author at bottom */}
+                        <div className="relative z-10 p-3.5 sm:p-4 space-y-1 text-white">
+                          <h4 className="text-xs sm:text-sm font-display font-extrabold leading-snug tracking-tight truncate group-hover:text-purple-300 transition-colors">
+                            {story.title}
+                          </h4>
+                          <p className="text-[10px] text-slate-300 font-medium truncate flex items-center justify-between">
+                            <span>by {story.authorName}</span>
+                            <span className="flex items-center gap-1 text-[10px] text-purple-300">
+                              <Heart className="w-3 h-3 fill-rose-500 text-rose-500" /> {story.likes}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+              </div>
+            );
+          })()
+        )}
+      </section>
 
       {/* 3. Continue Reading Section (Okumaya Devam Et) */}
       {continueReadingList.length > 0 && (
