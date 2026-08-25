@@ -28,9 +28,11 @@ import {
 } from '../data/mockData';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { ref, child, get } from 'firebase/database';
 import { 
   auth,
   db,
+  rtdb,
   fetchStoriesFromFirebase,
   subscribeToStoriesFromFirebase,
   fetchUsersFromFirebase,
@@ -62,7 +64,8 @@ import {
   firebasePasswordReset,
   firebaseLogoutUser,
   setAuthPersistence,
-  cleanupDuplicateUsersFromFirebase
+  cleanupDuplicateUsersFromFirebase,
+  updateFirebaseAuthProfile
 } from '../lib/firebase';
 
 export type { ViewType };
@@ -483,15 +486,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const existingIsSemaJim = existing.username?.toLowerCase() === 'semajim30' || existing.id === 'user_semajim30';
         const incomingIsSemaJim = u.username?.toLowerCase() === 'semajim30' || u.id === 'user_semajim30';
 
+        let primary = existing;
+        let secondary = u;
         if (incomingIsSemaJim && !existingIsSemaJim) {
-          emailMap.set(email, u);
+          primary = u;
+          secondary = existing;
         } else if (!existingIsSemaJim && !incomingIsSemaJim) {
           const existingGeneric = existing.username?.startsWith('yazar_') || existing.name === 'Google Kullanıcısı';
           const incomingGeneric = u.username?.startsWith('yazar_') || u.name === 'Google Kullanıcısı';
           if (existingGeneric && !incomingGeneric) {
-            emailMap.set(email, u);
+            primary = u;
+            secondary = existing;
           }
         }
+
+        const finalAvatar = (primary.avatar && !primary.avatar.includes('dicebear'))
+          ? primary.avatar
+          : (secondary.avatar && !secondary.avatar.includes('dicebear') ? secondary.avatar : (primary.avatar || secondary.avatar));
+        const finalCover = primary.coverUrl || secondary.coverUrl || '';
+        const finalBio = (primary.bio && !primary.bio.includes('WattyBoon yazarı ve okuru ✨'))
+          ? primary.bio
+          : (secondary.bio || primary.bio);
+
+        emailMap.set(email, {
+          ...secondary,
+          ...primary,
+          avatar: finalAvatar,
+          coverUrl: finalCover,
+          bio: finalBio,
+          library: Array.from(new Set([...(primary.library || []), ...(secondary.library || [])])),
+          followers: Array.from(new Set([...(primary.followers || []), ...(secondary.followers || [])])),
+          following: Array.from(new Set([...(primary.following || []), ...(secondary.following || [])])),
+        });
       }
     }
 
@@ -622,6 +648,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const isRememberMe = localStorage.getItem('wattyboon_remember_me') !== 'false';
       if (fbUser) {
         let userProfile: User | null = null;
+
+        // 1. Try Firestore
         try {
           const docSnap = await getDoc(doc(db, 'users', fbUser.uid));
           if (docSnap.exists()) {
@@ -629,27 +657,70 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         } catch {}
 
+        // 2. Try RTDB
+        if (!userProfile) {
+          try {
+            const rtdbSnap = await get(child(ref(rtdb), `users/${fbUser.uid}`));
+            if (rtdbSnap.exists()) {
+              userProfile = rtdbSnap.val() as User;
+            }
+          } catch {}
+        }
+
         const cleanEmail = (fbUser.email || '').trim().toLowerCase();
         const isAdmin = cleanEmail === 'wattyboontr@gmail.com' || cleanEmail === 'semajim30@gmail.com';
         const fallbackUsername = (cleanEmail.split('@')[0] || `user_${fbUser.uid.slice(0, 5)}`).replace(/[^a-z0-9]/gi, '');
 
+        // 3. Try LocalStorage active user or local users state
+        let localUser: User | null = null;
+        try {
+          const activeRaw = localStorage.getItem('wattyboon_active_user');
+          if (activeRaw) {
+            const parsed = JSON.parse(activeRaw);
+            if (parsed && (parsed.id === fbUser.uid || (cleanEmail && parsed.email?.toLowerCase() === cleanEmail))) {
+              localUser = parsed;
+            }
+          }
+        } catch {}
+
+        if (!localUser) {
+          localUser = users.find((u) => u.id === fbUser.uid || (cleanEmail && u.email?.toLowerCase() === cleanEmail)) || null;
+        }
+
         if (!userProfile) {
-          userProfile = {
-            id: fbUser.uid,
-            name: fbUser.displayName || fallbackUsername,
-            username: fallbackUsername,
-            email: cleanEmail || `${fallbackUsername}@wattyboon.com`,
-            role: isAdmin ? 'admin' : 'author',
-            avatar: fbUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${fallbackUsername}`,
-            bio: 'WattyBoon yazarı ve okuru ✨',
-            joinedDate: new Date().toISOString().split('T')[0],
-            followers: [],
-            following: [],
-            library: [],
-            readingProgress: [],
-            customLists: [],
-          };
+          if (localUser) {
+            userProfile = { ...localUser, id: fbUser.uid };
+          } else {
+            userProfile = {
+              id: fbUser.uid,
+              name: fbUser.displayName || fallbackUsername,
+              username: fallbackUsername,
+              email: cleanEmail || `${fallbackUsername}@wattyboon.com`,
+              role: isAdmin ? 'admin' : 'author',
+              avatar: fbUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${fallbackUsername}`,
+              coverUrl: '',
+              bio: 'WattyBoon yazarı ve okuru ✨',
+              joinedDate: new Date().toISOString().split('T')[0],
+              followers: [],
+              following: [],
+              library: [],
+              readingProgress: [],
+              customLists: [],
+            };
+          }
         } else {
+          // If remote user exists, merge with any local custom avatar or coverUrl
+          if (localUser) {
+            if (localUser.avatar && !localUser.avatar.includes('dicebear')) {
+              userProfile.avatar = localUser.avatar;
+            }
+            if (localUser.coverUrl) {
+              userProfile.coverUrl = localUser.coverUrl;
+            }
+            if (localUser.bio && (!userProfile.bio || userProfile.bio.includes('WattyBoon'))) {
+              userProfile.bio = localUser.bio;
+            }
+          }
           if (isAdmin) userProfile.role = 'admin';
         }
 
@@ -658,7 +729,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setUsers((prev) => {
           const exists = prev.some((u) => u.id === normalized.id);
           if (exists) {
-            return prev.map((u) => (u.id === normalized.id ? normalized : u));
+            return prev.map((u) => (u.id === normalized.id ? { ...u, ...normalized } : u));
           }
           return [...prev, normalized];
         });
@@ -666,6 +737,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
           localStorage.setItem('wattyboon_active_user', JSON.stringify(normalized));
         } catch {}
+
+        // Persist to Firebase in background so it's always in sync
+        saveUserToFirebase(normalized).catch(() => {});
 
         if (isRememberMe) {
           setCurrentUserId(fbUser.uid);
@@ -695,10 +769,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setUsers((prev) => {
             const map = new Map<string, User>();
             // Keep local users first
-            prev.forEach((u) => map.set(u.id, u));
-            // Merge in Firebase users
+            prev.forEach((u) => {
+              if (u && u.id) map.set(u.id, u);
+            });
+            // Merge in Firebase users without destroying local custom avatar or coverUrl
             fbUsers.forEach((u) => {
-              map.set(u.id, normalizeUser(u));
+              if (!u || !u.id) return;
+              const norm = normalizeUser(u);
+              const existing = map.get(u.id);
+              if (existing) {
+                const finalAvatar = (norm.avatar && !norm.avatar.includes('dicebear'))
+                  ? norm.avatar
+                  : (existing.avatar || norm.avatar);
+                const finalCover = norm.coverUrl || existing.coverUrl || '';
+                const finalBio = (norm.bio && !norm.bio.includes('WattyBoon yazarı ve okuru ✨'))
+                  ? norm.bio
+                  : (existing.bio || norm.bio);
+                map.set(u.id, {
+                  ...existing,
+                  ...norm,
+                  avatar: finalAvatar,
+                  coverUrl: finalCover,
+                  bio: finalBio,
+                });
+              } else {
+                map.set(u.id, norm);
+              }
             });
             const merged = Array.from(map.values()).filter((u) => !isBannedUser(u));
             return deduplicateUsersList(merged);
@@ -1858,7 +1954,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     // Update users state
-    setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? updatedUser : u)));
+    setUsers((prev) => {
+      const updatedList = prev.map((u) => (u.id === currentUser.id ? updatedUser : u));
+      try {
+        localStorage.setItem(`${LOCAL_STORAGE_PREFIX}users`, JSON.stringify(updatedList));
+      } catch {}
+      return updatedList;
+    });
+
+    // Write directly to localStorage cache for active user
+    try {
+      localStorage.setItem('wattyboon_active_user', JSON.stringify(updatedUser));
+    } catch {}
+
+    // Update Firebase Auth profile
+    updateFirebaseAuthProfile(finalName, finalAvatar).catch(() => {});
 
     // Propagate author updates to stories
     setStories((prev) =>
@@ -1896,6 +2006,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Save to Firebase storage
     await saveUserToFirebase(updatedUser);
+    if (auth.currentUser && auth.currentUser.uid !== updatedUser.id) {
+      await saveUserToFirebase({ ...updatedUser, id: auth.currentUser.uid });
+    }
 
     return {
       success: true,

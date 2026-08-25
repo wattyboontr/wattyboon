@@ -351,7 +351,7 @@ export async function firebaseGoogleLoginUser(customEmail?: string, customName?:
       };
     } else {
       if (isAdmin) userProfile.role = 'admin';
-      if (fbUser.photoURL && !userProfile.avatar?.includes('data:')) {
+      if ((!userProfile.avatar || userProfile.avatar.includes('dicebear')) && fbUser.photoURL) {
         userProfile.avatar = fbUser.photoURL;
       }
     }
@@ -642,25 +642,26 @@ export function subscribeToStoriesFromFirebase(callback: (stories: Story[]) => v
 export async function saveStoryToFirebase(story: Story): Promise<void> {
   if (!story || !story.id) return;
   deletedStoryIdsInFirebase.delete(story.id);
+  const cleanStory = cleanForFirebase(story);
 
   // Save to Firestore collections
   try {
-    await setDoc(doc(db, 'stories', story.id), story, { merge: true });
+    await setDoc(doc(db, 'stories', story.id), cleanStory, { merge: true });
   } catch (err) {
     console.warn('Firestore save story notice:', err);
   }
   try {
-    await setDoc(doc(db, 'wattyboon_stories', story.id), story, { merge: true });
+    await setDoc(doc(db, 'wattyboon_stories', story.id), cleanStory, { merge: true });
   } catch (err) {}
 
   // Save to RTDB
   try {
-    await set(ref(rtdb, `stories/${story.id}`), story);
+    await set(ref(rtdb, `stories/${story.id}`), cleanStory);
   } catch (err) {
     console.warn('RTDB save story notice:', err);
   }
   try {
-    await set(ref(rtdb, `wattyboon_stories/${story.id}`), story);
+    await set(ref(rtdb, `wattyboon_stories/${story.id}`), cleanStory);
   } catch (err) {}
 }
 
@@ -851,14 +852,50 @@ export async function fetchUsersFromFirebase(): Promise<User[]> {
   return [...Array.from(emailMap.values()), ...usersWithoutEmail];
 }
 
+export function cleanForFirebase<T>(obj: T): T {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map((item) => cleanForFirebase(item)) as any;
+  }
+  const clean: any = {};
+  for (const [key, value] of Object.entries(obj as Record<string, any>)) {
+    if (value !== undefined) {
+      if (typeof value === 'object' && value !== null) {
+        clean[key] = cleanForFirebase(value);
+      } else {
+        clean[key] = value;
+      }
+    }
+  }
+  return clean;
+}
+
+export async function updateFirebaseAuthProfile(displayName?: string, photoURL?: string): Promise<void> {
+  if (auth.currentUser) {
+    try {
+      const updateData: { displayName?: string; photoURL?: string } = {};
+      if (displayName) updateData.displayName = displayName;
+      if (photoURL) updateData.photoURL = photoURL;
+      await updateProfile(auth.currentUser, updateData);
+    } catch (e) {
+      console.warn('Firebase Auth updateProfile notice:', e);
+    }
+  }
+}
+
 export async function saveUserToFirebase(user: User): Promise<void> {
   if (!user || !user.id) return;
+  const cleanUser = cleanForFirebase(user);
   try {
-    await setDoc(doc(db, 'users', user.id), user, { merge: true });
-  } catch (e) {}
+    await setDoc(doc(db, 'users', user.id), cleanUser, { merge: true });
+  } catch (e) {
+    console.warn('Firestore user save notice:', e);
+  }
   try {
-    await set(ref(rtdb, `users/${user.id}`), user);
-  } catch (e) {}
+    await set(ref(rtdb, `users/${user.id}`), cleanUser);
+  } catch (e) {
+    console.warn('RTDB user save notice:', e);
+  }
 }
 
 export async function deleteUserFromFirebase(userId: string): Promise<void> {
@@ -908,11 +945,12 @@ export async function fetchForumTopicsFromFirebase(): Promise<ForumTopic[]> {
 
 export async function saveForumTopicToFirebase(topic: ForumTopic): Promise<void> {
   if (!topic || !topic.id) return;
+  const cleanTopic = cleanForFirebase(topic);
   try {
-    await setDoc(doc(db, 'forum_topics', topic.id), topic, { merge: true });
+    await setDoc(doc(db, 'forum_topics', topic.id), cleanTopic, { merge: true });
   } catch (e) {}
   try {
-    await set(ref(rtdb, `forum_topics/${topic.id}`), topic);
+    await set(ref(rtdb, `forum_topics/${topic.id}`), cleanTopic);
   } catch (e) {}
 }
 
@@ -963,11 +1001,12 @@ export async function fetchParagraphCommentsFromFirebase(): Promise<ParagraphCom
 
 export async function saveParagraphCommentToFirebase(comment: ParagraphComment): Promise<void> {
   if (!comment || !comment.id) return;
+  const cleanComment = cleanForFirebase(comment);
   try {
-    await setDoc(doc(db, 'paragraph_comments', comment.id), comment, { merge: true });
+    await setDoc(doc(db, 'paragraph_comments', comment.id), cleanComment, { merge: true });
   } catch (e) {}
   try {
-    await set(ref(rtdb, `paragraph_comments/${comment.id}`), comment);
+    await set(ref(rtdb, `paragraph_comments/${comment.id}`), cleanComment);
   } catch (e) {}
 }
 
@@ -1018,11 +1057,12 @@ export async function fetchCommentsFromFirebase(): Promise<Comment[]> {
 
 export async function saveCommentToFirebase(comment: Comment): Promise<void> {
   if (!comment || !comment.id) return;
+  const cleanComment = cleanForFirebase(comment);
   try {
-    await setDoc(doc(db, 'comments', comment.id), comment, { merge: true });
+    await setDoc(doc(db, 'comments', comment.id), cleanComment, { merge: true });
   } catch (e) {}
   try {
-    await set(ref(rtdb, `comments/${comment.id}`), comment);
+    await set(ref(rtdb, `comments/${comment.id}`), cleanComment);
   } catch (e) {}
 }
 
@@ -1073,11 +1113,12 @@ export async function fetchNotificationsFromFirebase(): Promise<AppNotification[
 
 export async function saveNotificationToFirebase(notif: AppNotification): Promise<void> {
   if (!notif || !notif.id) return;
+  const cleanNotif = cleanForFirebase(notif);
   try {
-    await setDoc(doc(db, 'notifications', notif.id), notif, { merge: true });
+    await setDoc(doc(db, 'notifications', notif.id), cleanNotif, { merge: true });
   } catch (e) {}
   try {
-    await set(ref(rtdb, `notifications/${notif.id}`), notif);
+    await set(ref(rtdb, `notifications/${notif.id}`), cleanNotif);
   } catch (e) {}
 }
 
@@ -1118,11 +1159,12 @@ export async function fetchMessagesFromFirebase(): Promise<DirectMessage[]> {
 
 export async function saveMessageToFirebase(msg: DirectMessage): Promise<void> {
   if (!msg || !msg.id) return;
+  const cleanMsg = cleanForFirebase(msg);
   try {
-    await setDoc(doc(db, 'messages', msg.id), msg, { merge: true });
+    await setDoc(doc(db, 'messages', msg.id), cleanMsg, { merge: true });
   } catch (e) {}
   try {
-    await set(ref(rtdb, `messages/${msg.id}`), msg);
+    await set(ref(rtdb, `messages/${msg.id}`), cleanMsg);
   } catch (e) {}
 }
 
@@ -1163,11 +1205,12 @@ export async function fetchReportsFromFirebase(): Promise<StoryReport[]> {
 
 export async function saveReportToFirebase(report: StoryReport): Promise<void> {
   if (!report || !report.id) return;
+  const cleanReport = cleanForFirebase(report);
   try {
-    await setDoc(doc(db, 'reports', report.id), report, { merge: true });
+    await setDoc(doc(db, 'reports', report.id), cleanReport, { merge: true });
   } catch (e) {}
   try {
-    await set(ref(rtdb, `reports/${report.id}`), report);
+    await set(ref(rtdb, `reports/${report.id}`), cleanReport);
   } catch (e) {}
 }
 
