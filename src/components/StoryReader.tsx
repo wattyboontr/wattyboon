@@ -105,16 +105,27 @@ export const StoryReader: React.FC = () => {
     ? currentChapter.likedBy.includes(currentUser.id) 
     : false;
 
-  const handleShare = () => {
+  const [isCopied, setIsCopied] = useState(false);
+
+  const handleShare = async () => {
     if (navigator.share) {
-      navigator.share({
-        title: `${story.title} - ${currentChapter.title}`,
-        text: story.summary,
-        url: window.location.href,
-      }).catch(() => {});
+      try {
+        await navigator.share({
+          title: `${story.title} - ${currentChapter.title}`,
+          text: story.summary,
+          url: window.location.href,
+        });
+      } catch {
+        // Ignored
+      }
     } else {
-      navigator.clipboard.writeText(window.location.href);
-      alert('Hikaye bağlantısı kopyalandı!');
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2500);
+      } catch {
+        // Fallback
+      }
     }
   };
 

@@ -31,7 +31,8 @@ import {
   Crown,
   ExternalLink,
   Edit3,
-  Home
+  Home,
+  Users
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -196,10 +197,25 @@ export const Header: React.FC<HeaderProps> = ({ onOpenInfoModal }) => {
         {/* Right Action Icons & User Profile */}
         <div className="flex items-center gap-2 sm:gap-3">
           
+          {/* Topluluk / Forum Button */}
+          <button
+            type="button"
+            onClick={() => setActiveView('forum')}
+            className={`relative p-2.5 rounded-xl border transition-all cursor-pointer ${
+              activeView === 'forum'
+                ? 'bg-purple-50 dark:bg-purple-950/80 border-purple-300 dark:border-purple-800 text-purple-600 dark:text-purple-300'
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-purple-300'
+            }`}
+            title="Topluluk & Forum"
+          >
+            <Users className="w-4 h-4" />
+          </button>
+
           {/* Messages Button */}
           <button
+            type="button"
             onClick={() => openMessagingWithUser()}
-            className="relative p-2.5 rounded-xl border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-purple-300 transition-all"
+            className="relative p-2.5 rounded-xl border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-purple-300 transition-all cursor-pointer"
             title="Mesajlar"
           >
             <MessageCircle className="w-4 h-4" />

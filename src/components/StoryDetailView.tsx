@@ -166,16 +166,27 @@ export const StoryDetailView: React.FC = () => {
   const hasReadingHistory = userReadingProgress !== null && userReadingProgress.lastChapterIndex > 0;
   const resumeChapterTitle = story.chapters[resumeChapterIndex]?.title || `${resumeChapterIndex + 1}. Bölüm`;
 
-  const handleShare = () => {
+  const [isCopied, setIsCopied] = useState(false);
+
+  const handleShare = async () => {
     if (navigator.share) {
-      navigator.share({
-        title: story.title,
-        text: story.summary,
-        url: window.location.href,
-      }).catch(() => {});
+      try {
+        await navigator.share({
+          title: story.title,
+          text: story.summary,
+          url: window.location.href,
+        });
+      } catch {
+        // Ignored if cancelled
+      }
     } else {
-      navigator.clipboard.writeText(window.location.href);
-      alert('Hikaye bağlantısı kopyalandı!');
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2500);
+      } catch {
+        // Fallback
+      }
     }
   };
 
