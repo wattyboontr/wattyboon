@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { ALL_CATEGORIES_DATA } from './CategoriesView';
 import { 
   Map, 
   Compass, 
@@ -17,7 +18,6 @@ import {
 export const SitemapView: React.FC = () => {
   const { 
     stories, 
-    categories, 
     forumTopics, 
     setActiveView, 
     openStoryDetail, 
@@ -26,6 +26,8 @@ export const SitemapView: React.FC = () => {
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
+
+  const categories = ALL_CATEGORIES_DATA.map((c) => c.name);
 
   const mainPages = [
     { title: 'Ana Sayfa', desc: 'Vitrin, öne çıkan eserler ve editör seçimleri', view: 'home', icon: BookOpen, url: 'https://wattyboon.com/' },

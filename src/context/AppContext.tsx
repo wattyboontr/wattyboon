@@ -123,6 +123,7 @@ interface AppContextType {
   setActiveView: (view: ViewType) => void;
   activeStoryId: string | null;
   activeChapterIndex: number;
+  setActiveChapterIndex: (index: number) => void;
   activeAuthorId: string | null;
   editingStoryId: string | null;
   openStoryDetail: (storyId: string) => void;
@@ -145,7 +146,7 @@ interface AppContextType {
 
   // Forum & Topluluk Tartışmaları
   forumTopics: ForumTopic[];
-  addForumTopic: (title: string, category: ForumTopic['category'], content: string, tags?: string[]) => string;
+  addForumTopic: (title: string, category: ForumTopic['category'] | string, content: string, tags?: string[]) => string;
   deleteForumTopic: (topicId: string) => void;
   addForumReply: (topicId: string, content: string) => void;
   deleteForumReply: (topicId: string, replyId: string) => void;
@@ -180,7 +181,7 @@ interface AppContextType {
   updateReadingProgress: (storyId: string, chapterIndex: number) => void;
 
   // Custom Reading Lists (Özel Kütüphane Listeleri)
-  createCustomList: (name: string, description?: string) => string;
+  createCustomList: (name: string, description?: string, isPrivate?: boolean) => string;
   addStoryToCustomList: (listId: string, storyId: string) => void;
   removeStoryFromCustomList: (listId: string, storyId: string) => void;
   deleteCustomList: (listId: string) => void;
@@ -206,6 +207,7 @@ interface AppContextType {
   // Notifications
   notifications: AppNotification[];
   unreadNotificationCount: number;
+  sendNotification: (notifData: Partial<AppNotification>) => void;
   markAsRead: (notificationId: string) => void;
   markAllAsRead: () => void;
 
@@ -835,7 +837,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const fbNotifs = await fetchNotificationsFromFirebase();
         if (isMounted && Array.isArray(fbNotifs) && fbNotifs.length > 0) {
-          setNotifications(fbNotifs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+          setNotifications((prev) => {
+            const map = new Map<string, AppNotification>();
+            prev.forEach((n) => { if (n && n.id) map.set(n.id, n); });
+            fbNotifs.forEach((n) => { if (n && n.id) map.set(n.id, n); });
+            return Array.from(map.values()).sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+          });
         }
       } catch (err) {
         console.warn('[Firebase Notifications] Sync notice:', err);
@@ -873,7 +882,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const fbMsgs = await fetchMessagesFromFirebase();
         if (isMounted && Array.isArray(fbMsgs) && fbMsgs.length > 0) {
-          setMessages(fbMsgs);
+          setMessages((prev) => {
+            const map = new Map<string, DirectMessage>();
+            prev.forEach((m) => { if (m && m.id) map.set(m.id, m); });
+            fbMsgs.forEach((m) => { if (m && m.id) map.set(m.id, m); });
+            return Array.from(map.values()).sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+          });
         }
       } catch (err) {
         console.warn('[Firebase Messages] Sync notice:', err);
@@ -1147,13 +1163,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Custom Lists Actions
-  const createCustomList = (name: string, description?: string): string => {
+  const createCustomList = (name: string, description?: string, isPrivate?: boolean): string => {
     if (!currentUser || !name.trim()) return '';
     const newId = 'clist_' + Date.now();
     const newList: CustomList = {
       id: newId,
       name: name.trim(),
       description: description?.trim(),
+      isPrivate: isPrivate || false,
       storyIds: [],
       createdAt: new Date().toISOString().split('T')[0],
     };
@@ -2279,9 +2296,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
-    // Send email notification to story author if not commenting on own story
+    // Send in-app notification and email notification to story author if not commenting on own story
     const targetStory = stories.find((s) => s.id === storyId);
     if (targetStory && targetStory.authorId !== currentUser.id) {
+      sendNotification({
+        userId: targetStory.authorId,
+        actorId: currentUser.id,
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar,
+        type: 'comment',
+        title: '💬 Yeni Yorum',
+        message: `${currentUser.name}, "${targetStory.title}" adlı hikayene yorum yaptı: "${content.slice(0, 60)}${content.length > 60 ? '...' : ''}"`,
+        storyId: targetStory.id,
+        chapterIndex: 0,
+      });
+
       const authorUser = users.find((u) => u.id === targetStory.authorId);
       if (authorUser?.email) {
         sendCommentEmailNotification({
@@ -2343,7 +2373,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
-    // Send email notification to parent comment owner or story author
+    // Send in-app notification and email notification to parent comment owner or story author
     const targetStory = stories.find((s) => s.id === storyId);
     const findCommentInTree = (comms: Comment[]): Comment | undefined => {
       for (const c of comms) {
@@ -2357,6 +2387,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     const parentComment = targetStory?.comments ? findCommentInTree(targetStory.comments) : undefined;
     if (parentComment && parentComment.userId !== currentUser.id) {
+      sendNotification({
+        userId: parentComment.userId,
+        actorId: currentUser.id,
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar,
+        type: 'comment',
+        title: '💬 Yorumuna Yanıt Geldi',
+        message: `${currentUser.name}, "${targetStory?.title || 'Hikaye'}" altındaki yorumuna yanıt verdi: "${content.slice(0, 60)}${content.length > 60 ? '...' : ''}"`,
+        storyId: targetStory?.id,
+        chapterIndex: 0,
+      });
+
       const recipientUser = users.find((u) => u.id === parentComment.userId);
       if (recipientUser?.email) {
         sendCommentEmailNotification({
@@ -2968,7 +3011,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Notifications
-  const userNotifications = notifications.filter((n) => n.userId === currentUserId);
+  const userNotifications = notifications.filter(
+    (n) => n.userId === currentUserId || (currentUser && n.userId === currentUser.id)
+  );
   const unreadNotificationCount = userNotifications.filter((n) => !n.isRead).length;
 
   const markAsRead = (notificationId: string) => {
@@ -2985,9 +3030,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const markAllAsRead = () => {
+    const activeUid = currentUserId || currentUser?.id;
     setNotifications((prev) =>
       prev.map((n) => {
-        if (n.userId === currentUserId) {
+        if (n.userId === activeUid || (currentUser && n.userId === currentUser.id)) {
           const updated = { ...n, isRead: true };
           saveNotificationToFirebase(updated);
           return updated;
@@ -3297,6 +3343,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveView,
         activeStoryId,
         activeChapterIndex,
+        setActiveChapterIndex,
         activeAuthorId,
         editingStoryId,
         openStoryDetail,
@@ -3360,6 +3407,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         notifications: userNotifications,
         unreadNotificationCount,
+        sendNotification,
         markAsRead,
         markAllAsRead,
 

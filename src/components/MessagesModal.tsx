@@ -23,11 +23,22 @@ export const MessagesModal: React.FC = () => {
   const [mobileView, setMobileView] = useState<'contacts' | 'chat'>('contacts');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Get list of potential message contacts
+  // Get list of potential message contacts or search results
   const contacts = React.useMemo(() => {
     if (!currentUser) return [];
-    const contactIds = new Set<string>();
+    
+    // If user is searching, search all other users across platform
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      return users
+        .filter((u) => u.id !== currentUser.id)
+        .filter((u) =>
+          (u.name && u.name.toLowerCase().includes(q)) ||
+          (u.username && u.username.toLowerCase().includes(q))
+        );
+    }
 
+    const contactIds = new Set<string>();
     messages.forEach((m) => {
       if (m.senderId === currentUser.id) contactIds.add(m.receiverId);
       if (m.receiverId === currentUser.id) contactIds.add(m.senderId);
@@ -36,12 +47,14 @@ export const MessagesModal: React.FC = () => {
     currentUser.following?.forEach((id) => contactIds.add(id));
     currentUser.followers?.forEach((id) => contactIds.add(id));
 
-    return users
-      .filter((u) => u.id !== currentUser.id && contactIds.has(u.id))
-      .filter((u) => 
-        u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        u.username.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+    const existingContacts = users.filter((u) => u.id !== currentUser.id && contactIds.has(u.id));
+    
+    // If no existing chat contacts, offer other users as recommended authors to message
+    if (existingContacts.length === 0) {
+      return users.filter((u) => u.id !== currentUser.id).slice(0, 10);
+    }
+
+    return existingContacts;
   }, [currentUser, messages, users, searchQuery]);
 
   // Sync selected user when activeMessagingUserId changes
@@ -75,8 +88,8 @@ export const MessagesModal: React.FC = () => {
   const conversationMessages = selectedUser
     ? messages.filter(
         (m) =>
-          (m.senderId === currentUser.id && m.receiverId === selectedUser.id) ||
-          (m.senderId === selectedUser.id && m.receiverId === currentUser.id)
+          (String(m.senderId) === String(currentUser.id) && String(m.receiverId) === String(selectedUser.id)) ||
+          (String(m.senderId) === String(selectedUser.id) && String(m.receiverId) === String(currentUser.id))
       ).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     : [];
 

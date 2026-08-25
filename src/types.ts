@@ -123,11 +123,13 @@ export interface StoryReport {
   reasonTitle: string;
   description: string;
   originalSourceUrl?: string; // Stolen original story link / proof
+  sourceUrl?: string;
   status: ReportStatus;
   createdAt: string;
   resolvedAt?: string;
   resolvedBy?: string;
   resolutionNote?: string;
+  adminNotes?: string;
 }
 
 export interface DirectMessage {
@@ -170,6 +172,30 @@ export interface User {
   isPrivate?: boolean; // Gizli profil / Hesap gizleme
   followers: string[]; // userIds following this user
   following: string[]; // userIds this user follows
+  followersCount?: number;
+  followingCount?: number;
+  storiesCount?: number;
+  coins?: number;
+  diamonds?: number;
+  xp?: number;
+  level?: number;
+  tier?: string;
+  vipLevel?: number;
+  vipPoints?: number;
+  premiumPlan?: string;
+  isVip?: boolean;
+  isAuthor?: boolean;
+  isVerifiedAuthor?: boolean;
+  badges?: string[];
+  stats?: {
+    storiesRead?: number;
+    timeSpentReadingMinutes?: number;
+    commentsWritten?: number;
+    dailyStreak?: number;
+    lastActiveDate?: string;
+  };
+  savedStories?: string[];
+  bookmarks?: string[];
   followRequests?: string[]; // userIds who sent pending follow request
   library: {
     storyId: string;
@@ -179,7 +205,7 @@ export interface User {
   }[];
   readingProgress?: ReadingProgress[];
   customLists?: CustomList[];
-  joinedDate: string;
+  joinedDate?: string;
 }
 
 export type NotificationType = 

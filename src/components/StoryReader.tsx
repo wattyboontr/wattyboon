@@ -44,7 +44,8 @@ export const StoryReader: React.FC = () => {
     isStoryInLibrary, 
     currentUser,
     setIsAuthModalOpen,
-    updateReadingProgress
+    updateReadingProgress,
+    incrementStoryReads
   } = useApp();
 
   const [fontSize, setFontSize] = useState<number>(18);
@@ -64,12 +65,26 @@ export const StoryReader: React.FC = () => {
   }, [activeStoryId, activeStoryFromContext?.id, activeStoryFromContext?.updatedAt]);
 
   const story = readingStory || activeStoryFromContext || stories[0];
+  const chapters = story?.chapters || [];
+  const currentChapterIndex = Math.max(0, Math.min(Number(activeChapterIndex) || 0, Math.max(0, chapters.length - 1)));
+
+  const goToChapter = (targetIndex: number) => {
+    if (!chapters || chapters.length === 0) return;
+    const validIndex = Math.max(0, Math.min(Number(targetIndex) || 0, chapters.length - 1));
+    setActiveChapterIndex(validIndex);
+    setIsChapterMenuOpen(false);
+    if (story?.id) {
+      if (incrementStoryReads) incrementStoryReads(story.id, validIndex);
+      if (updateReadingProgress) updateReadingProgress(story.id, validIndex);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   useEffect(() => {
-    if (story?.id && currentUser && activeChapterIndex !== undefined) {
-      updateReadingProgress(story.id, activeChapterIndex);
+    if (story?.id && currentUser && currentChapterIndex !== undefined) {
+      updateReadingProgress(story.id, currentChapterIndex);
     }
-  }, [story?.id, activeChapterIndex, currentUser?.id]);
+  }, [story?.id, currentChapterIndex, currentUser?.id]);
 
   if (!story) {
     return (
@@ -89,8 +104,7 @@ export const StoryReader: React.FC = () => {
   const isSaved = isStoryInLibrary(story.id);
   const isStoryLiked = currentUser ? (story.likedBy || []).includes(currentUser.id) : false;
 
-  const chapters = story.chapters || [];
-  const currentChapter = chapters[activeChapterIndex] || chapters[0] || {
+  const currentChapter = chapters[currentChapterIndex] || chapters[0] || {
     id: 'chap_1',
     title: '1. Bölüm',
     content: story.summary || 'Bu bölüm henüz eklenmedi.',
@@ -302,44 +316,71 @@ export const StoryReader: React.FC = () => {
             <span className="hidden sm:inline">Detaya Dön</span>
           </button>
 
-          {/* Chapter Quick Switcher */}
-          <div className="relative">
+          {/* Chapter Quick Switcher & Nav Buttons */}
+          <div className="flex items-center gap-1">
+            {/* Previous Chapter Top Quick Button */}
             <button
-              onClick={() => setIsChapterMenuOpen(!isChapterMenuOpen)}
-              className="px-3 py-2 rounded-xl bg-purple-50 dark:bg-purple-950/80 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer hover:bg-purple-100 transition-colors"
+              onClick={() => goToChapter(currentChapterIndex - 1)}
+              disabled={currentChapterIndex <= 0}
+              className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                currentChapterIndex <= 0
+                  ? 'opacity-30 cursor-not-allowed border-slate-200 dark:border-slate-800 text-slate-400'
+                  : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-purple-100 dark:hover:bg-purple-950'
+              }`}
+              title="Önceki Bölüm"
             >
-              <ListFilter className="w-3.5 h-3.5 text-purple-600" />
-              <span className="max-w-[130px] sm:max-w-[200px] truncate">
-                {currentChapter.title}
-              </span>
+              <ChevronLeft className="w-4 h-4" />
             </button>
 
-            {/* Chapter Dropdown */}
-            {isChapterMenuOpen && (
-              <div className="absolute top-full left-0 mt-2 w-64 max-h-72 overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-2 z-50 space-y-1">
-                <div className="text-[10px] font-bold text-slate-400 px-3 py-1 uppercase tracking-wider">
-                  Bölüm Seç ({chapters.length})
+            {/* Chapter Dropdown Trigger */}
+            <div className="relative">
+              <button
+                onClick={() => setIsChapterMenuOpen(!isChapterMenuOpen)}
+                className="px-3 py-2 rounded-xl bg-purple-50 dark:bg-purple-950/80 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer hover:bg-purple-100 transition-colors"
+              >
+                <ListFilter className="w-3.5 h-3.5 text-purple-600" />
+                <span className="max-w-[110px] sm:max-w-[180px] truncate">
+                  {currentChapter.title}
+                </span>
+              </button>
+
+              {/* Chapter Dropdown */}
+              {isChapterMenuOpen && (
+                <div className="absolute top-full left-0 mt-2 w-64 max-h-72 overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-2 z-50 space-y-1">
+                  <div className="text-[10px] font-bold text-slate-400 px-3 py-1 uppercase tracking-wider">
+                    Bölüm Seç ({chapters.length})
+                  </div>
+                  {chapters.map((chap, idx) => (
+                    <button
+                      key={chap.id}
+                      onClick={() => goToChapter(idx)}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                        idx === currentChapterIndex
+                          ? 'bg-purple-600 text-white'
+                          : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <span className="truncate">{chap.title}</span>
+                      <span className="text-[10px] opacity-75">{chap.order}. Bölüm</span>
+                    </button>
+                  ))}
                 </div>
-                {chapters.map((chap, idx) => (
-                  <button
-                    key={chap.id}
-                    onClick={() => {
-                      setActiveChapterIndex(idx);
-                      setIsChapterMenuOpen(false);
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                      idx === activeChapterIndex
-                        ? 'bg-purple-600 text-white'
-                        : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <span className="truncate">{chap.title}</span>
-                    <span className="text-[10px] opacity-75">{chap.order}. Bölüm</span>
-                  </button>
-                ))}
-              </div>
-            )}
+              )}
+            </div>
+
+            {/* Next Chapter Top Quick Button */}
+            <button
+              onClick={() => goToChapter(currentChapterIndex + 1)}
+              disabled={currentChapterIndex >= chapters.length - 1}
+              className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                currentChapterIndex >= chapters.length - 1
+                  ? 'opacity-30 cursor-not-allowed border-slate-200 dark:border-slate-800 text-slate-400'
+                  : 'bg-purple-600 border-purple-600 text-white hover:bg-purple-700 shadow-sm'
+              }`}
+              title="Sonraki Bölüm"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
 
           {/* Actions & Settings */}
@@ -552,15 +593,10 @@ export const StoryReader: React.FC = () => {
             
             {/* Previous Chapter */}
             <button
-              onClick={() => {
-                if (activeChapterIndex > 0) {
-                  setActiveChapterIndex(activeChapterIndex - 1);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }
-              }}
-              disabled={activeChapterIndex === 0}
+              onClick={() => goToChapter(currentChapterIndex - 1)}
+              disabled={currentChapterIndex <= 0}
               className={`w-full sm:w-auto px-5 py-3 rounded-2xl border font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                activeChapterIndex === 0
+                currentChapterIndex <= 0
                   ? 'opacity-40 cursor-not-allowed border-slate-200 dark:border-slate-800 text-slate-400'
                   : 'bg-slate-100 dark:bg-slate-800 hover:bg-purple-600 hover:text-white border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-sm'
               }`}
@@ -570,7 +606,7 @@ export const StoryReader: React.FC = () => {
 
             {/* Like Chapter Button */}
             <button
-              onClick={() => toggleLikeChapter(story.id, activeChapterIndex)}
+              onClick={() => toggleLikeChapter(story.id, currentChapterIndex)}
               className={`px-6 py-3 rounded-2xl border font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
                 isChapterLiked
                   ? 'bg-rose-500 text-white border-rose-500 shadow-lg shadow-rose-500/25'
@@ -583,15 +619,10 @@ export const StoryReader: React.FC = () => {
 
             {/* Next Chapter */}
             <button
-              onClick={() => {
-                if (activeChapterIndex < chapters.length - 1) {
-                  setActiveChapterIndex(activeChapterIndex + 1);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }
-              }}
-              disabled={activeChapterIndex >= chapters.length - 1}
+              onClick={() => goToChapter(currentChapterIndex + 1)}
+              disabled={currentChapterIndex >= chapters.length - 1}
               className={`w-full sm:w-auto px-5 py-3 rounded-2xl border font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                activeChapterIndex >= chapters.length - 1
+                currentChapterIndex >= chapters.length - 1
                   ? 'opacity-40 cursor-not-allowed border-slate-200 dark:border-slate-800 text-slate-400'
                   : 'bg-purple-600 hover:bg-purple-700 text-white border-purple-600 shadow-lg shadow-purple-500/25'
               }`}
@@ -604,7 +635,7 @@ export const StoryReader: React.FC = () => {
 
         {/* Chapter Comments Section */}
         <section className="pt-4">
-          <StoryCommentsSection storyId={story.id} chapterIndex={activeChapterIndex} />
+          <StoryCommentsSection storyId={story.id} chapterIndex={currentChapterIndex} />
         </section>
 
       </div>

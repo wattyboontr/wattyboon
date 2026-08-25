@@ -370,7 +370,7 @@ export const StoryEditor: React.FC = () => {
     try {
       const hostedUrl = await uploadImageToHost(file, file.name);
       if (hostedUrl) {
-        insertAtCursor(`\n\n![Hikaye Görseli](${hostedUrl})\n\n`);
+        insertAtCursor(`\n\n![](${hostedUrl})\n\n`);
       }
     } catch (err) {
       console.error('Chapter image upload error:', err);
@@ -986,7 +986,7 @@ export const StoryEditor: React.FC = () => {
                   onClick={() => {
                     const url = prompt('Eklemek istediğiniz görselin Web (URL) adresini girin:');
                     if (url) {
-                      insertAtCursor(`\n\n![Hikaye Görseli](${url})\n\n`);
+                      insertAtCursor(`\n\n![](${url})\n\n`);
                     }
                   }}
                   className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-colors cursor-pointer" 

@@ -30,7 +30,7 @@ interface StoryCommentsSectionProps {
 }
 
 export const StoryCommentsSection: React.FC<StoryCommentsSectionProps> = ({ storyId, chapterIndex }) => {
-  const { currentUser, stories } = useApp();
+  const { currentUser, stories, sendNotification } = useApp();
   const story = stories.find((s) => s.id === storyId);
 
   const [comments, setComments] = useState<StoryCommentRow[]>([]);
@@ -85,6 +85,22 @@ export const StoryCommentsSection: React.FC<StoryCommentsSectionProps> = ({ stor
 
       setComments((prev) => [inserted, ...prev]);
       setCommentInput('');
+
+      // Send in-app notification to story author if not self-commenting
+      if (story && story.authorId && story.authorId !== currentUser.id && sendNotification) {
+        sendNotification({
+          userId: story.authorId,
+          actorId: currentUser.id,
+          senderId: currentUser.id,
+          senderName: currentUser.name,
+          senderAvatar: currentUser.avatar,
+          type: 'comment',
+          title: '💬 Yeni Yorum',
+          message: `${currentUser.name}, "${story.title}" adlı hikayene yorum yaptı: "${content.slice(0, 60)}${content.length > 60 ? '...' : ''}"`,
+          storyId: story.id,
+          chapterIndex,
+        });
+      }
     } catch (err) {
       console.warn('Comment submit notice:', err);
     } finally {
@@ -125,6 +141,22 @@ export const StoryCommentsSection: React.FC<StoryCommentsSectionProps> = ({ stor
       setReplyTargetUser(null);
       // Ensure thread is not collapsed
       setCollapsedThreads((prev) => ({ ...prev, [rootComment.id]: false }));
+
+      // Send in-app notification to comment owner
+      if (rootComment.user_id && rootComment.user_id !== currentUser.id && sendNotification) {
+        sendNotification({
+          userId: rootComment.user_id,
+          actorId: currentUser.id,
+          senderId: currentUser.id,
+          senderName: currentUser.name,
+          senderAvatar: currentUser.avatar,
+          type: 'comment',
+          title: '💬 Yorumuna Yanıt Geldi',
+          message: `${currentUser.name}, "${story?.title || 'Hikaye'}" altındaki yorumuna yanıt verdi: "${content.slice(0, 60)}${content.length > 60 ? '...' : ''}"`,
+          storyId: story?.id || storyId,
+          chapterIndex,
+        });
+      }
     } catch (err) {
       console.warn('Reply submit notice:', err);
     } finally {

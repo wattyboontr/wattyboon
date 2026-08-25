@@ -41,7 +41,7 @@ export const FormattedContent: React.FC<FormattedContentProps> = ({
               <div className="relative max-w-full overflow-hidden rounded-none border-0 p-0 shadow-none bg-transparent">
                 <img
                   src={imgUrl}
-                  alt={altText || 'Hikaye Görseli'}
+                  alt={altText || 'Görsel'}
                   className="max-h-[550px] w-auto max-w-full object-contain rounded-none border-0 shadow-none transition-transform duration-300 group-hover:scale-[1.01]"
                   loading="lazy"
                   onError={(e) => {
@@ -51,7 +51,12 @@ export const FormattedContent: React.FC<FormattedContentProps> = ({
                   }}
                 />
               </div>
-              {altText && altText !== 'Görsel' && altText !== 'Görsel Açıklaması' && (
+              {altText && 
+               altText.trim() !== '' && 
+               altText !== 'Görsel' && 
+               altText !== 'Hikaye Görseli' && 
+               altText !== 'Bölüm Görseli' && 
+               altText !== 'Görsel Açıklaması' && (
                 <span className="text-xs text-slate-500 dark:text-slate-400 mt-2 font-medium italic text-center">
                   🖼️ {altText}
                 </span>
